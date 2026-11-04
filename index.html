@@ -2036,8 +2036,8 @@
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.9.0';
-    const APP_RELEASE_DATE = '2026-10-30';
+    const APP_VERSION = '1.9.1';
+    const APP_RELEASE_DATE = '2026-11-04';
     let db;
 
     const QUALITY_SETTINGS = {
@@ -2871,6 +2871,9 @@
     let autoBackupFailed = false;        // ★追加: 直近の保存が失敗している(保存先が見つからない等)。赤い表示にして、定期的な自動再試行は止める
     let autoBackupErrorMessage = '';     // ★追加: 失敗の理由(ボタンの説明・メニューに表示する)
     let autoBackupErrorNotified = false; // ★追加: 失敗の案内を、同じ失敗が続く間は最初の1回だけ出すためのフラグ
+    let autoBackupCurrentState = '';     // ★追加: ボタンの今の表示状態('enabled' / 'permission-needed' / 'error' / 'disabled')。実際の許可の状態とのずれを直すために使う
+    let autoBackupPermissionDetail = ''; // ★追加: 許可が必要になった理由（ボタンの説明に出す。エラーの種類つき）
+    let autoBackupLastRecheckAt = 0;     // ★追加: 許可の再確認を、短い間隔で何度も行わないための時刻
     let autoBackupLastSuccessAt = null; // ★追加: 最終バックアップ成功日時(ms)。ボタンのツールチップに表示する
 
     // ★追加: バックアップ対象ストアへの書き込みが起きた時に呼ばれる（dbOp内から自動的に呼ばれる）
@@ -3115,6 +3118,21 @@
         return `保存先に保存できませんでした（${(err && err.name) || 'エラー'}）。保存先フォルダを確認してください`;
     }
     function reportAutoBackupFailure(err, anchorEl) {
+        // ★変更: 許可のエラーは、「保存先の失敗」ではなく、「許可が必要」として扱う。
+        // 「保存先の失敗」にすると、ボタンを押したときに許可を求める手順を飛ばしてしまい、赤いまま緑に戻れなくなっていた
+        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+            autoBackupFailed = false;
+            autoBackupErrorMessage = '';
+            autoBackupPermissionDetail = `（${err.name}）保存先への書き込み許可が必要です`;
+            updateAutoBackupButtonStyle('permission-needed');
+            if (!autoBackupErrorNotified) {
+                autoBackupErrorNotified = true;
+                const floatingP = document.getElementById('quick-todo-btn-auto-backup');
+                const anchorP = anchorEl || ((floatingP && floatingP.offsetParent !== null) ? floatingP : document.getElementById('btn-auto-backup'));
+                showStatusPopup(anchorP, '自動バックアップ: 保存先への書き込み許可が必要です（ボタンを押して、許可してください）', { autoHideMs: 9000, spinner: false });
+            }
+            return;
+        }
         autoBackupFailed = true;
         autoBackupErrorMessage = autoBackupErrorText(err);
         updateAutoBackupButtonStyle('error');
@@ -3128,6 +3146,7 @@
     function clearAutoBackupFailure() {
         autoBackupFailed = false;
         autoBackupErrorMessage = '';
+        autoBackupPermissionDetail = '';
         autoBackupErrorNotified = false;
     }
 
@@ -3143,6 +3162,7 @@
         try {
             const perm = await getAutoBackupHandle().queryPermission({ mode: 'readwrite' });
             if (perm !== 'granted') {
+                autoBackupDirtySinceLastSave = true; // ★追加: 許可が戻ったときに、保存し直せるよう印を残す
                 updateAutoBackupButtonStyle('permission-needed');
                 return;
             }
@@ -3184,6 +3204,7 @@
         const dot = document.getElementById('auto-backup-indicator-dot');
         if (dot) dot.className = 'auto-backup-indicator-dot' + (state === 'enabled' ? ' state-green' : (state === 'permission-needed' || state === 'error') ? ' state-red' : '');
         const applyStyle = (el, color, title) => { if (el) { el.style.color = color; el.title = title; } };
+        autoBackupCurrentState = state; // ★追加: 今の表示状態を覚えておく
         if (floatingBtn) floatingBtn.dataset.abState = state; // ★追加: ライトテーマで色が付くよう、状態を属性に持たせる
         if (state === 'enabled') {
             // ★追加: title属性は\nで改行できるため、2段目に最終更新日時を表示する
@@ -3199,8 +3220,9 @@
             applyStyle(btn, '#dc3545', errTitle);
             applyStyle(floatingBtn, '#dc3545', errTitle);
         } else if (state === 'permission-needed') {
-            applyStyle(btn, '#dc3545', '自動バックアップ: 許可が必要です（クリックして再許可）');
-            applyStyle(floatingBtn, '#dc3545', '自動バックアップ: 許可が必要です（クリックして再許可）');
+            const permTitle = '自動バックアップ: 許可が必要です（クリックして再許可）' + (autoBackupPermissionDetail ? `\n${autoBackupPermissionDetail}` : '');
+            applyStyle(btn, '#dc3545', permTitle);
+            applyStyle(floatingBtn, '#dc3545', permTitle);
         } else {
             applyStyle(btn, '', '自動バックアップを設定（未設定）');
             applyStyle(floatingBtn, '', '自動バックアップを設定（未設定）');
@@ -3241,6 +3263,30 @@
             // 保存されていない、または壊れている場合は何もしない（自動バックアップ未設定として扱う）
         }
     }
+
+    // ★追加: 実際の許可の状態と、ボタンの色のずれを直す。
+    // ・赤(許可が必要)なのに、許可がすでに戻っていれば、保存し直して、緑にする（ボタンを押さなくても直る）
+    // ・緑なのに、許可が切れていれば、赤にする
+    async function recheckAutoBackupPermission() {
+        const handle = getAutoBackupHandle();
+        if (!handle || autoBackupInProgress) return;
+        const nowMs = Date.now();
+        if (nowMs - autoBackupLastRecheckAt < 5000) return;
+        autoBackupLastRecheckAt = nowMs;
+        try {
+            const perm = await handle.queryPermission({ mode: 'readwrite' });
+            if (perm === 'granted' && autoBackupCurrentState === 'permission-needed') {
+                startAutoBackupPeriodicTimer();
+                autoBackupDirtySinceLastSave = true;
+                await performAutoBackup();
+            } else if (perm !== 'granted' && autoBackupCurrentState === 'enabled') {
+                updateAutoBackupButtonStyle('permission-needed');
+            }
+        } catch (e) { /* 確認できなければ、何もしない */ }
+    }
+    window.addEventListener('focus', recheckAutoBackupPermission);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) recheckAutoBackupPermission(); });
+    setInterval(recheckAutoBackupPermission, 60000);
 
     async function disableAutoBackup() {
         autoBackupFileHandle = null;
@@ -10253,23 +10299,41 @@
                 const anchorEl = (autoBackupClickAnchor && autoBackupClickAnchor.offsetParent !== null) ? autoBackupClickAnchor : btnAutoBackup;
                 if (getAutoBackupHandle()) {
                     // 既に設定済み：許可が失われていれば再許可、有効なら停止するか確認する
-                    // ★変更: 保存に失敗している状態(保存先が見つからない等)のときは、許可の確認を飛ばして、すぐにメニュー(保存先の変更など)を出す
-                    if (!autoBackupFailed) try {
+                    // ★変更: 押したときは、いつも最初に、実際の許可の状態を確認する（赤いまま許可を求めずにメニューが出る不具合の修正）。
+                    // ・許可が切れている → 許可を求める。許可されたら、すぐ保存して、緑にする
+                    // ・すでに許可済みなのに赤い（表示が古い・保存の失敗が残っている） → その場で保存を試し、成功したら緑にする。失敗が続くときだけ、メニューを出す
+                    try {
                         const perm = await getAutoBackupHandle().queryPermission({ mode: 'readwrite' });
                         if (perm !== 'granted') {
                             const newPerm = await getAutoBackupHandle().requestPermission({ mode: 'readwrite' });
                             if (newPerm === 'granted') {
+                                clearAutoBackupFailure();
                                 updateAutoBackupButtonStyle('enabled');
                                 startAutoBackupPeriodicTimer();
                                 showStatusPopup(anchorEl, '自動バックアップを再開しました', { autoHideMs: 2200, spinner: false });
+                                autoBackupDirtySinceLastSave = true;
+                                performAutoBackup(); // 許可が戻ったので、止まっていた分を保存して、状態を確かめる
                             } else {
                                 showStatusPopup(anchorEl, '書き込み許可が得られませんでした', { autoHideMs: 2800, spinner: false });
                             }
                             return;
                         }
+                        if (autoBackupCurrentState === 'permission-needed' || autoBackupCurrentState === 'error' || autoBackupFailed) {
+                            autoBackupFailed = false;
+                            autoBackupDirtySinceLastSave = true;
+                            showStatusPopup(anchorEl, '保存を試しています...');
+                            await performAutoBackup();
+                            if (autoBackupCurrentState === 'enabled' && !autoBackupFailed) {
+                                showStatusPopup(anchorEl, '保存できました。自動バックアップは有効です', { autoHideMs: 2600, spinner: false });
+                                return;
+                            }
+                            hideStatusPopup();
+                        }
                     } catch (err) {
-                        showStatusPopup(anchorEl, '許可の確認に失敗しました: ' + err.message, { autoHideMs: 3200, spinner: false });
-                        return;
+                        if (!autoBackupFailed) { // 保存先が見つからないなどで、すでに失敗している場合は、そのままメニューへ進む
+                            showStatusPopup(anchorEl, '許可の確認に失敗しました: ' + err.message, { autoHideMs: 3200, spinner: false });
+                            return;
+                        }
                     }
                     // ★変更: 押すとメニューを出す（保存先フォルダの変更／停止）。停止は、これまでと同じ確認を経て行う
                     openAutoBackupMenu(anchorEl, () => changeAutoBackupFolder(anchorEl), () => {
