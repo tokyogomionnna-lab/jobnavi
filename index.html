@@ -832,7 +832,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     .shape-table:focus .shape-resize-handle, .shape-table:focus-within .shape-resize-handle { display: block; z-index: 8; }
     .table-ghost { position: absolute; z-index: 25; pointer-events: none; display: grid; box-sizing: border-box; border: 1px dashed #0056b3; background: rgba(255, 255, 255, 0.55); opacity: 0.75; }
     .table-ghost > div { border-right: 1px solid rgba(0, 86, 179, 0.7); border-bottom: 1px solid rgba(0, 86, 179, 0.7); box-sizing: border-box; }
-    .text-mini-toolbar.table-mini-toolbar { max-width: 380px; } /* 行・列のボタンも並ぶため、文字のツールバーより幅を広げる（2行に折り返して、表に重ならないように） */
+    .text-mini-toolbar.table-mini-toolbar { max-width: none; width: max-content; flex-wrap: nowrap; white-space: nowrap; } /* 文字サイズ・横縦の揃え・行列の追加と削除を、折り返さず、1段に並べる */
+    .table-align-btn:disabled { opacity: 0.35; cursor: default; }
+    .table-align-btn:disabled:hover { background: #f8f9fa; }
     .table-struct-btn { min-width: 34px; height: 20px; border: 1px solid #ccc; background: #f8f9fa; border-radius: 3px; cursor: pointer; font-size: 11px; padding: 0 4px; white-space: nowrap; }
     .table-struct-btn:hover { background: #e9ecef; }
     .table-struct-btn:disabled { opacity: 0.4; cursor: default; }
@@ -2171,7 +2173,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.13.0';
+    const APP_VERSION = '1.15.0';
     const APP_RELEASE_DATE = '2026-11-04';
     let db;
 
@@ -5611,6 +5613,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                                     shape.style.color = ann.textColor || '#000000';
                                     shape.style.fontSize = `${ann.fontSize || 16}px`;
                                     shape.dataset.baseFontSize = String(ann.fontSize || 16); // ★追加: 用紙サイズに合わせた文字サイズ補正で使う
+                                    if (ann.refWidth > 0) shape.dataset.refWidth = String(ann.refWidth); // ★追加: 基準の幅（印刷時のウィンドウの大きさに左右されないようにする）
                                     shape.style.fontWeight = ann.fontWeight || 'normal';
                                     // ★追加: 画面表示と同じく縦書きにも対応する
                                     shape.style.writingMode = ann.vertical ? 'vertical-rl' : '';
@@ -5634,6 +5637,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                                     const gridP = document.createElement('div');
                                     gridP.className = 'tbl-grid-print';
                                     gridP.dataset.baseFontSize = String(tp.fontSize);
+                                    if (ann.refWidth > 0) gridP.dataset.refWidth = String(ann.refWidth);
                                     gridP.style.cssText = `position:absolute; inset:0; display:grid; box-sizing:border-box; background:#ffffff; border:1px solid #333; font-size:${tp.fontSize}px; color:${ann.textColor || '#000000'}; font-family:${TABLE_FONT_STACK};`;
                                     gridP.style.gridTemplateColumns = tableGridTemplate(tp.colWidths);
                                     gridP.style.gridTemplateRows = tableGridTemplate(tp.rowHeights);
@@ -5719,14 +5723,19 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 // その結果、用紙上では文字だけが相対的に小さく（大きく）なり、枠の中での文字位置がずれて見えていた。
                 // 画面上のコンテナ幅を基準に、用紙上のコンテナ幅との比率で文字サイズ・余白を拡縮して見た目を揃える
                 // (screenContainerWは、編集画面が非表示になる前の関数冒頭で取得済み)
-                if (screenContainerW > 0) {
+                {
                     pages.forEach((page) => {
                         const printContainer = page.querySelector('.media-container-print');
                         if (!printContainer) return;
                         const printW = printContainer.getBoundingClientRect().width;
                         if (!printW) return;
-                        const ratio = printW / screenContainerW;
+                        // ★変更: 基準の幅(refWidth)がある文字・表は、「用紙上の画像の幅 ÷ 基準の幅」で拡縮する（印刷するときの、ウィンドウの大きさに左右されない）。
+                        // 基準の幅が無いもの（まだ開いていない手順の注釈）は、従来どおり、印刷時の画面の幅との比
+                        const pageRatio = screenContainerW > 0 ? printW / screenContainerW : 0;
+                        const ratioOf = (el) => { const rw = parseFloat(el.dataset.refWidth || ''); return rw > 0 ? printW / rw : pageRatio; };
                         page.querySelectorAll('.tbl-grid-print').forEach(g => { // ★追加: 表の文字サイズ・余白・罫線の太さも、用紙上の大きさに合わせる
+                            const ratio = ratioOf(g);
+                            if (!(ratio > 0)) return;
                             const baseT = parseFloat(g.dataset.baseFontSize || '14');
                             const bwT = `${Math.max(0.5, 1 * ratio)}px`;
                             g.style.fontSize = `${baseT * ratio}px`;
@@ -5738,6 +5747,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                             });
                         });
                         page.querySelectorAll('.shape-text-print').forEach(el => {
+                            const ratio = ratioOf(el);
+                            if (!(ratio > 0)) return;
                             const base = parseFloat(el.dataset.baseFontSize || '16');
                             el.style.fontSize = `${base * ratio}px`;
                             el.style.padding = `${2 * ratio}px`;
@@ -7557,6 +7568,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         }
         mediaArea.resizeObserver = new ResizeObserver(() => {
             updateContainerSize();
+            rescaleAnnotationShapes(container, step); // ★追加: 画像の大きさが変わったら、文字・表の大きさも、同じ割合で直す
         });
         mediaArea.resizeObserver.observe(mediaArea);
 
@@ -7734,6 +7746,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     }
 
     function renderAnnotations(container, step, reRenderCallback) {
+        // ★追加: 基準の幅が無い（以前に作った）文字・表に、今の表示幅を基準として保存する（最初に開いたときだけ）
+        if (ensureAnnotationRefWidths(step, container)) dbOp('steps', 'readwrite', st => st.put(step)).catch(() => { /* 保存できなくても、次の保存で保存される */ });
         container.querySelectorAll('.shape').forEach(el => el.remove());
         hideGroupBoundingBox(container); // ★追加: 全体再描画時は古いグループ枠も消しておく(再選択されれば作り直される)
         document.querySelectorAll('.text-mini-toolbar').forEach(el => el.remove()); // ★修正: body直下に配置されるためdocument全体から検索して除去
@@ -7986,7 +8000,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 shape.style.color = ann.textColor || '#000000';
                 // ★修正: 図形は%指定のためズームで一緒に拡大されるが、テキストはpx指定のため取り残されていた。
                 // キャンバスの拡大倍率（2倍）に合わせて文字サイズも拡大する（保存されるann.fontSizeは変更しない）
-                const textZoomFactor = isZoomed ? 2 : 1;
+                let textZoomFactor = getAnnotationScale(ann, container); // ★変更: 拡大表示の2倍だけでなく、画像の表示幅（基準の幅との比）に合わせる
                 shape.style.fontSize = `${(ann.fontSize || 16) * textZoomFactor}px`;
                 // ★修正: 文字サイズはズーム倍率で拡大していたが、余白(padding)・最小幅(min-width)・枠線(border)はpx固定のまま
                 // 拡大されていなかった。そのため枠の中で文字が描かれ始める位置が拡大に追従せず、文字が本来より左に寄って見えていた。
@@ -8005,6 +8019,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 if (textFontStack) shape.style.fontFamily = textFontStack; // ★追加: 書体（未設定なら従来どおり）
                 if (ann.textAlign) shape.style.textAlign = getTextAlign(ann); // ★追加: 文字揃え（未設定なら従来どおり中央）
                 if (ann.boxed) { shape.classList.add('is-box'); applyTextBoxSize(shape, ann, textZoomFactor); } // ★追加: 範囲指定のテキスト枠
+                // ★追加: 画像の表示幅が変わったときに、文字・余白・枠の大きさを直す（ウィンドウの大きさ変更・サイドバーの開閉など）
+                shape._applyScale = () => {
+                    textZoomFactor = getAnnotationScale(ann, container);
+                    shape.style.fontSize = `${(ann.fontSize || 16) * textZoomFactor}px`;
+                    shape.style.padding = `${2 * textZoomFactor}px`;
+                    shape.style.borderWidth = `${1 * textZoomFactor}px`;
+                    if (ann.boxed) applyTextBoxSize(shape, ann, textZoomFactor); else shape.style.minWidth = `${24 * textZoomFactor}px`;
+                };
                 shape.textContent = ann.textContent || '';
                 let beforeEditContent = ann.textContent || '';
 
@@ -8861,7 +8883,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ・文字が増えて行に収まらなくなったら、行の高さを自動で広げる
     // ・左上の移動つまみで、表全体を移動（ほかの図形と同じドラッグ移動）。右下のつまみは、表全体の拡大縮小
     function buildTableShapeContent(shape, ann, step, container, isZoomed, isLocked, setEditing, reRenderCallback) {
-        const zoom = isZoomed ? 2 : 1;
+        let zoom = getAnnotationScale(ann, container); // ★変更: 拡大表示の2倍だけでなく、画像の表示幅（基準の幅との比）に合わせる。表示幅が変わったら、下の_applyScaleで更新する
         const save = async () => { try { await dbOp('steps', 'readwrite', s => s.put(step)); } catch (err) { alert('操作に失敗しました: ' + err.message); } };
         let toolbarEl = null; // ミニツールバー（セルを選んでいる間だけ、表の上（上端に近いときは下）に出す）
         // ツールバーの位置を、今の表の位置・高さに合わせる（表の高さが変わったときも、表に重ならないように、呼び直す）
@@ -8895,28 +8917,41 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         }
         shape.appendChild(grid);
 
-        // --- 行の高さを、内容に合わせて広げる（広げた分は、表全体の高さも増える。ほかの行の高さは、そのまま） ---
-        // 変更があれば、{ rowHeights, height } を返す（なければ null）。画面のスタイルも、ここで更新する
+        // --- 行の高さ ＝ 「基本の高さ」と「文字に必要な高さ」の大きいほう（広がるだけでなく、文字が減れば、基本の高さまで縮む） ---
+        // 基本の高さ(ann.rowBase)は、基準の幅の画像でのpx。標準の高さ・ドラッグで決めた高さ・「すべて同じ高さ」にした高さが、基本の高さになる。
+        // 自動で広がらない行(ann.rowFixed)は、文字が収まらなくても、基本の高さのまま（貼り付けた行。手でドラッグして、調整する）
+        const rowSig = () => tableRowSig(ann);
+        // 基本の高さが無い、または、表全体の拡大縮小など、外部から高さが変えられたときは、今の高さを基本の高さにする
+        const ensureBase = () => {
+            if (Array.isArray(ann.rowBase) && ann.rowBase.length === ann.rows && ann.rowSig === rowSig()) return;
+            const rect = shape.getBoundingClientRect();
+            if (rect.height <= 0) return;
+            ann.rowBase = ann.rowHeights.map(f => (f * rect.height) / zoom);
+            ann.rowFixed = (Array.isArray(ann.rowFixed) && ann.rowFixed.length === ann.rows) ? ann.rowFixed.slice() : Array.from({ length: ann.rows }, () => false);
+            ann.rowSig = rowSig();
+        };
+        // 行の高さに関する状態（取り消し・やり直しのため、変更の前後で保存する）
+        const rowStateNow = () => ({ rowHeights: ann.rowHeights.slice(), height: ann.height, rowBase: ann.rowBase ? ann.rowBase.slice() : undefined, rowFixed: ann.rowFixed ? ann.rowFixed.slice() : undefined, rowSig: ann.rowSig });
+        // 変更があれば、新しい行の状態を返す（なければ null）。画面のスタイルも、ここで更新する
         const autoFitRows = () => {
             const rect = shape.getBoundingClientRect();
             const containerH = container.getBoundingClientRect().height;
             if (rect.height <= 0 || containerH <= 0) return null;
-            const rowPx = ann.rowHeights.map(f => f * rect.height);
-            let grew = false;
+            ensureBase();
+            if (!Array.isArray(ann.rowBase)) return null;
             const contentPx = measureContentRowPx(); // 文字に必要な高さ（縦の揃えを、上・中央・下にしても、正しく測れる）
-            for (let r = 0; r < ann.rows; r++) {
-                const need = contentPx[r];
-                if (need > rowPx[r] + 0.5) { rowPx[r] = need; grew = true; }
-            }
-            if (!grew) return null;
-            const totalPx = rowPx.reduce((a, b) => a + b, 0);
-            const newRowHeights = rowPx.map(v => v / totalPx);
+            const curPx = ann.rowHeights.map(f => f * rect.height);
+            const newPx = ann.rowBase.map((b, r) => ann.rowFixed[r] ? b * zoom : Math.max(b * zoom, contentPx[r]));
+            if (newPx.every((v, r) => Math.abs(v - curPx[r]) < 0.5)) return null;
+            const totalPx = newPx.reduce((a, b) => a + b, 0);
+            const newRowHeights = newPx.map(v => v / totalPx);
             const newHeight = (totalPx / containerH) * 100;
             ann.rowHeights = newRowHeights; ann.height = newHeight;
+            ann.rowSig = rowSig();
             shape.style.height = `${newHeight}%`;
             grid.style.gridTemplateRows = tableGridTemplate(newRowHeights);
             layoutHandles();
-            return { rowHeights: newRowHeights, height: newHeight };
+            return rowStateNow();
         };
 
         // --- 列・行の境界のつまみ ---
@@ -8933,7 +8968,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             e.preventDefault(); e.stopPropagation();
             const rect = shape.getBoundingClientRect();
             const startPos = kind === 'col' ? e.clientX : e.clientY;
-            const startColWidths = ann.colWidths.slice(), startRowHeights = ann.rowHeights.slice(), startHeight = ann.height, startWidth = ann.width;
+            ensureBase();
+            const startColWidths = ann.colWidths.slice(), startWidth = ann.width, startRS = rowStateNow();
             const ctrl = new AbortController();
             // 表の右端が、キャンバス（余白を含む表示範囲）の外へ出ないようにする上限
             const bounds = getMarginClampBounds(container, container.closest('.media-area'));
@@ -8953,7 +8989,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                     grid.style.gridTemplateColumns = tableGridTemplate(ann.colWidths);
                 } else {
                     // この行の高さを変える（ほかの行の高さは、そのままで、表全体の高さが変わる）
-                    const startPx = startRowHeights.map(f => f * rect.height);
+                    const startPx = startRS.rowHeights.map(f => f * rect.height);
                     const newPx = startPx.slice(); newPx[index] = Math.max(TABLE_MIN_ROW_PX * zoom, startPx[index] + (ev.clientY - startPos));
                     const totalPx = newPx.reduce((a, b) => a + b, 0);
                     const containerH = container.getBoundingClientRect().height;
@@ -8968,16 +9004,24 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 ctrl.abort();
                 let before = {}, after = {};
                 if (kind === 'col') {
-                    // 幅が変わって文字の折り返しが増えたら、行の高さも広げる
-                    const fit = autoFitRows();
-                    before = { colWidths: startColWidths, width: startWidth }; after = { colWidths: ann.colWidths, width: ann.width };
-                    if (fit) { before.rowHeights = startRowHeights; before.height = startHeight; after.rowHeights = fit.rowHeights; after.height = fit.height; }
-                    if (JSON.stringify(startColWidths) === JSON.stringify(ann.colWidths) && !fit) return;
+                    // 幅が変わって文字の折り返しが変わったら、行の高さも合わせる（基本の高さより低くはならない）
+                    autoFitRows();
+                    before = { colWidths: startColWidths, width: startWidth, ...startRS }; after = { colWidths: ann.colWidths, width: ann.width, ...rowStateNow() };
+                    if (JSON.stringify(startColWidths) === JSON.stringify(ann.colWidths) && JSON.stringify(startRS) === JSON.stringify(rowStateNow())) return;
                 } else {
-                    before = { rowHeights: startRowHeights, height: startHeight }; after = { rowHeights: ann.rowHeights, height: ann.height };
-                    if (JSON.stringify(startRowHeights) === JSON.stringify(ann.rowHeights)) return;
+                    // 手で決めた高さが、この行の基本の高さになる。文字が収まらない高さにしたときは、自動では広がらない行にする（その高さで、文字は、はみ出した分が隠れる）
+                    if (!Array.isArray(ann.rowBase)) ensureBase();
+                    if (!Array.isArray(ann.rowBase)) return;
+                    const finalPx = ann.rowHeights[index] * shape.getBoundingClientRect().height;
+                    const contentPx = measureContentRowPx();
+                    const base = ann.rowBase.slice(); base[index] = finalPx / zoom;
+                    const fixed = ann.rowFixed.slice(); fixed[index] = finalPx + 0.5 < contentPx[index];
+                    ann.rowBase = base; ann.rowFixed = fixed; ann.rowSig = rowSig();
+                    before = { ...startRS }; after = rowStateNow();
+                    if (JSON.stringify(startRS) === JSON.stringify(after)) return;
                 }
                 pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after });
+                rebaseEditRowState();
                 await save();
             };
             document.addEventListener('mousemove', onMove, { signal: ctrl.signal });
@@ -9010,16 +9054,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
 
         // --- 行・列の追加と削除（挿入する行・列は標準の大きさ。表全体が、その分、大きく(小さく)なる）、等間隔 ---
         let currentCell = { r: 0, c: 0 };
-        const snapshot = () => ({ rows: ann.rows, cols: ann.cols, cells: ann.cells.map(r => r.slice()), colWidths: ann.colWidths.slice(), rowHeights: ann.rowHeights.slice(), width: ann.width, height: ann.height });
+        const snapshot = () => ({ rows: ann.rows, cols: ann.cols, cells: ann.cells.map(r => r.slice()), colWidths: ann.colWidths.slice(), width: ann.width, ...rowStateNow() });
         const structureChange = async (compute, focusCell) => {
             if (isAnnotationEditLocked(step.id)) return;
             await commitCells(); // 入力途中の文字を先に確定する
+            ensureBase();
             const rect = shape.getBoundingClientRect(), cRect = container.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0 || cRect.width <= 0 || cRect.height <= 0) return;
             const result = compute(rect, cRect);
             if (!result) return;
             const before = snapshot();
             Object.assign(ann, result);
+            ann.rowSig = rowSig();
             pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: snapshot() });
             appState.autoEditTableLocalId = ann.localId; appState.autoEditTableCell = focusCell; // 作り直したあと、同じ付近のセルに入力できる状態にする
             removeToolbar();
@@ -9031,14 +9077,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             const px = ann.rowHeights.map(f => f * rect.height); px.splice(idx, 0, TABLE_STD_ROW_PX * zoom);
             const total = px.reduce((a, b) => a + b, 0);
             const cells = ann.cells.map(r => r.slice()); cells.splice(idx, 0, Array.from({ length: ann.cols }, () => ''));
-            return { rows: ann.rows + 1, cells, rowHeights: px.map(v => v / total), height: (total / cRect.height) * 100 };
+            const base = (ann.rowBase || []).slice(); base.splice(idx, 0, TABLE_STD_ROW_PX);
+            const fixed = (ann.rowFixed || []).slice(); fixed.splice(idx, 0, false);
+            return { rows: ann.rows + 1, cells, rowHeights: px.map(v => v / total), height: (total / cRect.height) * 100, rowBase: base, rowFixed: fixed };
         }, focus);
         const deleteRowAt = (idx, focus) => structureChange((rect, cRect) => {
             if (ann.rows <= 1) return null;
             const px = ann.rowHeights.map(f => f * rect.height); px.splice(idx, 1);
             const total = px.reduce((a, b) => a + b, 0);
             const cells = ann.cells.map(r => r.slice()); cells.splice(idx, 1);
-            return { rows: ann.rows - 1, cells, rowHeights: px.map(v => v / total), height: (total / cRect.height) * 100 };
+            const base = (ann.rowBase || []).slice(); base.splice(idx, 1);
+            const fixed = (ann.rowFixed || []).slice(); fixed.splice(idx, 1);
+            return { rows: ann.rows - 1, cells, rowHeights: px.map(v => v / total), height: (total / cRect.height) * 100, rowBase: base, rowFixed: fixed };
         }, focus);
         const insertColAt = (idx, focus) => structureChange((rect, cRect) => {
             if (ann.cols >= TABLE_MAX_COLS) return null;
@@ -9054,20 +9104,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             const cells = ann.cells.map(r => { const n = r.slice(); n.splice(idx, 1); return n; });
             return { cols: ann.cols - 1, cells, colWidths: px.map(v => v / total), width: (total / cRect.width) * 100 };
         }, focus);
-        // すべての列を、同じ幅にする（表全体の幅は、そのまま。折り返しが増えて、行が足りなくなれば、行の高さを広げる）
+        // すべての列を、同じ幅にする（表全体の幅は、そのまま。折り返しが変われば、行の高さも合わせる）
         const equalizeCols = async () => {
             if (isAnnotationEditLocked(step.id)) return;
             await commitCells();
-            const startCols = ann.colWidths.slice(), startRows = ann.rowHeights.slice(), startHeight = ann.height;
+            ensureBase();
+            const startCols = ann.colWidths.slice(), startRS = rowStateNow();
             const equal = Array.from({ length: ann.cols }, () => 1 / ann.cols);
             if (equal.every((v, i) => Math.abs(v - startCols[i]) < 1e-6)) return;
             ann.colWidths = equal;
             grid.style.gridTemplateColumns = tableGridTemplate(equal);
             layoutHandles();
-            const fit = autoFitRows();
-            const before = { colWidths: startCols }, after = { colWidths: equal };
-            if (fit) { before.rowHeights = startRows; before.height = startHeight; after.rowHeights = fit.rowHeights; after.height = fit.height; }
-            pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after });
+            autoFitRows();
+            pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before: { colWidths: startCols, ...startRS }, after: { colWidths: equal, ...rowStateNow() } });
+            rebaseEditRowState();
             await save();
         };
         // 文字に必要な、各行の高さ(画面px)を測る（行の高さを自動(auto)にして、内容の高さだけを測り、すぐ元に戻す）
@@ -9078,24 +9128,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             grid.style.gridTemplateRows = saveRows; grid.style.alignItems = saveAlign;
             return res;
         };
-        // すべての行を、同じ高さにする（表全体の高さを、行の数で割った高さ。文字が入りきらない行があれば、その高さに合わせる）
+        // すべての行を、同じ高さにする（表全体の高さを、行の数で割った高さ。文字が入りきらない行があれば、その高さに合わせる）。その高さが、全行の基本の高さになる
         const equalizeRows = async () => {
             if (isAnnotationEditLocked(step.id)) return;
             await commitCells();
+            ensureBase();
             const rect = shape.getBoundingClientRect(), containerH = container.getBoundingClientRect().height;
-            if (rect.height <= 0 || containerH <= 0) return;
-            const startRows = ann.rowHeights.slice(), startHeight = ann.height;
+            if (rect.height <= 0 || containerH <= 0 || !Array.isArray(ann.rowBase)) return;
+            const startRS = rowStateNow();
             const content = measureContentRowPx();
-            const rowPx = Math.max(rect.height / ann.rows, TABLE_STD_ROW_PX * zoom * 0.5, ...content);
+            // 「自動で広がらない」行（貼り付けた長い文章など。手で調整する行）の文章の量は、揃える高さに、含めない
+            const rowPx = Math.max(rect.height / ann.rows, TABLE_STD_ROW_PX * zoom * 0.5, ...content.filter((_, r) => !ann.rowFixed[r]));
             const total = rowPx * ann.rows;
             const equal = Array.from({ length: ann.rows }, () => 1 / ann.rows);
-            const newHeight = (total / containerH) * 100;
-            if (equal.every((v, i) => Math.abs(v - startRows[i]) < 1e-6) && Math.abs(newHeight - startHeight) < 0.01) return;
-            ann.rowHeights = equal; ann.height = newHeight;
-            shape.style.height = `${newHeight}%`;
+            ann.rowHeights = equal; ann.height = (total / containerH) * 100;
+            ann.rowBase = Array.from({ length: ann.rows }, () => rowPx / zoom);
+            ann.rowSig = rowSig(); // 「自動で広がらない」行は、そのまま（揃えた高さが、基本の高さになる）
+            shape.style.height = `${ann.height}%`;
             grid.style.gridTemplateRows = tableGridTemplate(equal);
             layoutHandles();
-            pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before: { rowHeights: startRows, height: startHeight }, after: { rowHeights: equal, height: newHeight } });
+            const after = rowStateNow();
+            if (JSON.stringify(startRS) === JSON.stringify(after)) return;
+            pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before: { ...startRS }, after });
+            rebaseEditRowState();
             await save();
         };
         // セルの右クリックメニュー（Excelと同じ。切り取り・コピー・貼り付けは、Ctrl+X・C・Vで行う）
@@ -9149,14 +9204,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             const changeFontSize = async (v) => {
                 v = Math.max(8, Math.min(200, v));
                 if (v === ann.fontSize) return;
-                const startHeight = ann.height, startRows = ann.rowHeights.slice();
-                const before = { fontSize: ann.fontSize };
+                ensureBase();
+                const before = { fontSize: ann.fontSize, ...rowStateNow() };
                 ann.fontSize = v; applyTableStyle();
                 sizeInput.value = v;
-                const fit = autoFitRows();
-                const after = { fontSize: v };
-                if (fit) { before.rowHeights = startRows; before.height = startHeight; after.rowHeights = fit.rowHeights; after.height = fit.height; }
-                pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after });
+                autoFitRows();
+                pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: { fontSize: v, ...rowStateNow() } });
+                rebaseEditRowState();
                 await save();
             };
             const minus = mkBtn('text-size-btn', '−', '文字を小さく');
@@ -9198,22 +9252,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             addAlignGroup('verticalAlign', [['top', '上揃え（セルの上に寄せる）'], ['middle', '上下中央揃え'], ['bottom', '下揃え（セルの下に寄せる）']]);
             // 行・列の追加と削除（選んでいるセルの行・列が基準。行・列は、下・右に追加する）
             const div2 = document.createElement('div'); div2.className = 'text-toolbar-divider'; toolbarEl.appendChild(div2);
-            const mkStruct = (text, title, enabled, handler) => {
-                const b = mkBtn('table-struct-btn', text, title);
+            const mkStruct = (kind, title, enabled, handler) => {
+                const b = document.createElement('button');
+                b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+                b.className = 'table-align-btn';
+                b.innerHTML = tableStructIconSvg(kind);
                 b.disabled = !enabled;
+                b.addEventListener('mousedown', (ev) => ev.preventDefault());
                 b.addEventListener('click', (ev) => { ev.stopPropagation(); handler(); });
                 toolbarEl.appendChild(b);
             };
             const cr = () => currentCell;
-            mkStruct('行＋', '選んでいる行の下に、行を追加', ann.rows < TABLE_MAX_ROWS, () => insertRowAt(cr().r + 1, { r: cr().r + 1, c: cr().c }));
-            mkStruct('行−', '選んでいる行を削除', ann.rows > 1, () => deleteRowAt(cr().r, { r: Math.min(cr().r, ann.rows - 2), c: cr().c }));
-            mkStruct('列＋', '選んでいる列の右に、列を追加', ann.cols < TABLE_MAX_COLS, () => insertColAt(cr().c + 1, { r: cr().r, c: cr().c + 1 }));
-            mkStruct('列−', '選んでいる列を削除', ann.cols > 1, () => deleteColAt(cr().c, { r: cr().r, c: Math.min(cr().c, ann.cols - 2) }));
+            mkStruct('rowAdd', '選んでいる行の下に、行を追加', ann.rows < TABLE_MAX_ROWS, () => insertRowAt(cr().r + 1, { r: cr().r + 1, c: cr().c }));
+            mkStruct('rowDel', '選んでいる行を削除', ann.rows > 1, () => deleteRowAt(cr().r, { r: Math.min(cr().r, ann.rows - 2), c: cr().c }));
+            mkStruct('colAdd', '選んでいる列の右に、列を追加', ann.cols < TABLE_MAX_COLS, () => insertColAt(cr().c + 1, { r: cr().r, c: cr().c + 1 }));
+            mkStruct('colDel', '選んでいる列を削除', ann.cols > 1, () => deleteColAt(cr().c, { r: cr().r, c: Math.min(cr().c, ann.cols - 2) }));
             container.appendChild(toolbarEl);
         };
 
         // --- セルの編集 ---
-        let editStartCells = null, editStartHeight = null, editStartRows = null;
+        let editStartCells = null, editStartRS = null;
+        // 入力中に、文字サイズの変更・等間隔・行の境界のドラッグなど、別の操作で行の高さが変わった場合は、それぞれが取り消しに記録されるので、
+        // セルの確定時に、同じ変化を二重に記録しないよう、入力前の状態を、その時点の状態に更新する
+        function rebaseEditRowState() { if (editStartCells) editStartRS = rowStateNow(); }
         const commitCells = async () => {
             if (!editStartCells) return;
             const newCells = ann.cells.map(row => row.slice());
@@ -9222,22 +9283,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 const text = (el.innerText || '').replace(/\n$/, '');
                 if (text !== (newCells[r][c] || '')) { newCells[r][c] = text; changed = true; }
             }));
-            if (changed) {
-                const before = { cells: editStartCells };
-                const after = { cells: newCells };
-                ann.cells = newCells;
-                const fit = autoFitRows();
-                if (fit) { before.rowHeights = editStartRows; before.height = editStartHeight; after.rowHeights = fit.rowHeights; after.height = fit.height; }
-                pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after });
+            if (changed) { ann.cells = newCells; autoFitRows(); }
+            const afterRS = rowStateNow();
+            const rowChanged = !!editStartRS && JSON.stringify(editStartRS) !== JSON.stringify(afterRS); // 貼り付けで、行が「自動で広がらない」になった場合も含む
+            if (changed || rowChanged) {
+                pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before: { cells: editStartCells, ...(editStartRS || {}) }, after: { cells: ann.cells.map(row => row.slice()), ...afterRS } });
                 await save();
             }
-            editStartCells = null;
+            editStartCells = null; editStartRS = null;
         };
         cellEls.forEach((row, r) => row.forEach((el, c) => {
             el.addEventListener('focus', () => {
                 setEditing(true);
                 currentCell = { r, c };
-                if (!editStartCells) { editStartCells = ann.cells.map(rw => rw.slice()); editStartHeight = ann.height; editStartRows = ann.rowHeights.slice(); }
+                if (!editStartCells) { ensureBase(); editStartCells = ann.cells.map(rw => rw.slice()); editStartRS = rowStateNow(); }
                 showToolbar();
             });
             el.addEventListener('input', () => { autoFitRows(); }); // 入力しながら、行の高さを広げる
@@ -9272,6 +9331,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             if (!isLocked) el.addEventListener('contextmenu', (ev) => { ev.preventDefault(); ev.stopPropagation(); currentCell = { r, c }; showCellMenu(ev, r, c); }); // 右クリック: 行・列の追加と削除
             el.addEventListener('paste', (ev) => { // 貼り付けは、書式をなくした文字だけにする
                 ev.preventDefault();
+                // 貼り付けた文章の量に合わせて、行を自動で広げない（今のセルの大きさを保つ。あとで、手で行の境界をドラッグして、調整する）
+                ensureBase();
+                if (Array.isArray(ann.rowFixed)) { const f = ann.rowFixed.slice(); f[r] = true; ann.rowFixed = f; }
                 const text = (ev.clipboardData || window.clipboardData).getData('text/plain');
                 document.execCommand('insertText', false, text);
             });
@@ -9296,6 +9358,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         };
         document.addEventListener('mousedown', outsideHandler);
         (container._textOutsideClickHandlers = container._textOutsideClickHandlers || []).push(outsideHandler);
+        // 画像の表示幅が変わったときに、文字・余白・罫線の大きさを直す（ウィンドウの大きさ変更・サイドバーの開閉など）
+        shape._applyScale = () => {
+            zoom = getAnnotationScale(ann, container);
+            grid.style.fontSize = `${(ann.fontSize || 14) * zoom}px`;
+            grid.style.borderWidth = `${tableBorderPx(zoom)}px`;
+            const bw = `${tableBorderPx(zoom)}px`;
+            cellEls.forEach(row => row.forEach(el => { el.style.padding = `${1 * zoom}px ${4 * zoom}px`; el.style.borderRightWidth = bw; el.style.borderBottomWidth = bw; }));
+            layoutHandles();
+        };
         // 配置した直後は、最初のセルに入力できる状態にする
         if (appState.autoEditTableLocalId === ann.localId) {
             appState.autoEditTableLocalId = null;
@@ -9415,6 +9486,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 const { tSize, g, left, top } = tableGeometryAt(e.clientX, e.clientY);
                 const newAnn = createTableAnnotation(tSize.rows, tSize.cols, left, top, g.wPct, g.hPct);
                 newAnn.fontSize = g.fontSize;
+                newAnn.refWidth = container.getBoundingClientRect().width / (container.classList.contains('zoomed') ? 2 : 1); // 文字・表の大きさの基準の幅
                 clearAnnotationSelection(container);
                 step.annotations = step.annotations || [];
                 const newIndex = step.annotations.length;
@@ -9657,6 +9729,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                             newAnn = {
                                 type: 'text', left: finalLeft, top: finalTop,
                                 width: w, height: h, num: null, isLine: false, memo: '', localId: generateId(),
+                                refWidth: rect.width / (container.classList.contains('zoomed') ? 2 : 1), // ★追加: 文字の大きさの基準の幅
                                 textContent: '', textColor: '#000000', fontSize: 16, bgColor: null, fontWeight: 'normal',
                                 ...(isTextBox ? { boxed: true, textAlign: 'left' } : {}) // ★追加: 範囲指定のテキスト枠は左揃えで始める
                             };
@@ -9888,7 +9961,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 boxed: !!ann.boxed && toNum(ann.width, 0) > 0 && toNum(ann.height, 0) > 0 // 幅・高さが無い枠は、従来のテキスト(自動サイズ)として扱う
             } : {}),
             memoColor: [null, ...TAB_COLOR_PRESETS].includes(ann.memoColor) ? ann.memoColor : null, // ★追加: メモ欄の背景色
-            ...(ann.type === 'table' ? sanitizeTableFields(ann) : {}) // ★追加: 表（行・列・列幅・行の高さ・セルの文字・文字サイズ・揃え）
+            ...(ann.type === 'table' ? sanitizeTableFields(ann) : {}), // ★追加: 表（行・列・列幅・行の高さ・セルの文字・文字サイズ・揃え）
+            ...((ann.type === 'text' || ann.type === 'table') ? { refWidth: (typeof ann.refWidth === 'number' && isFinite(ann.refWidth) && ann.refWidth > 0) ? Math.min(ann.refWidth, 20000) : undefined } : {}) // ★追加: 文字・表の基準の幅（不正な値は取り除き、最初に開いたときに付け直す）
         };
     }
 
@@ -12137,6 +12211,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         };
         return (ann && Object.prototype.hasOwnProperty.call(stacks, ann.fontFamily)) ? stacks[ann.fontFamily] : '';
     }
+    // ===== ★追加: 文字の注釈・表の「基準の幅」 =====
+    // 文字サイズ(ann.fontSize)は、「基準の幅(ann.refWidth)の画像」で、そのpxに見える大きさ。
+    // 画像の表示幅が変わる（ウィンドウの大きさを変える・サイドバーを開閉する・拡大表示）と、文字・余白・罫線も、同じ割合で拡縮する。
+    // これにより、ウィンドウの大きさを変えても、画像に対する文字の大きさが、変わらない（印刷・画像化も、同じ）。
+    // refWidthが無い（以前に作った）注釈は、最初に開いたときの画像の表示幅（拡大表示中は、その半分）を基準にして保存する
+    function getAnnotationScale(ann, container) {
+        const w = container.getBoundingClientRect().width;
+        if (!(ann && ann.refWidth > 0) || !(w > 0)) return container.classList.contains('zoomed') ? 2 : 1; // 基準の幅が決まる前は、従来どおり（拡大表示で2倍）
+        return w / ann.refWidth;
+    }
+    function ensureAnnotationRefWidths(step, container) { // 基準の幅が無い文字・表に、今の表示幅を基準として付ける。付けたらtrueを返す
+        const w = container.getBoundingClientRect().width;
+        if (!(w > 0)) return false;
+        const base = w / (container.classList.contains('zoomed') ? 2 : 1);
+        let changed = false;
+        (step.annotations || []).forEach(a => { if ((a.type === 'text' || a.type === 'table') && !(a.refWidth > 0)) { a.refWidth = base; changed = true; } });
+        return changed;
+    }
+    // 表示幅が変わったときに、文字・表の大きさを、基準の幅に合わせて直す（描画し直さず、その場で直す）
+    function rescaleAnnotationShapes(container, step) {
+        if (!container || !step) return;
+        if (ensureAnnotationRefWidths(step, container)) dbOp('steps', 'readwrite', st => st.put(step)).catch(() => { /* 保存できなくても、次の保存で保存される */ });
+        container.querySelectorAll('.shape[data-local-id]').forEach(el => { if (typeof el._applyScale === 'function') el._applyScale(); });
+    }
+
     // ===== ★追加: 表（table）の注釈 =====
     // { type:'table', left, top, width, height(全体。画像に対する%), rows, cols, colWidths:[列の幅の割合(合計1)], rowHeights:[行の高さの割合(合計1)],
     //   cells:[[文字(行×列)]], fontSize, textAlign:'left'|'center'|'right', noMemo:true }
@@ -12164,6 +12263,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         const scale = Math.min(1, availW / wPct, availH / hPct);
         return { wPct: wPct * scale, hPct: hPct * scale, fontSize: Math.max(8, Math.round(14 * scale)), scale };
     }
+    // 行の「基本の高さ」(rowBase)が、今の表の高さと食い違っていないかを調べる署名（表全体の拡大縮小など、外部からの変更を見つける）
+    function tableRowSig(ann) { return `${ann.rowHeights.map(v => v.toFixed(5)).join(',')}|${ann.height.toFixed(3)}`; }
     function normalizeFractions(arr, count) { // 割合の配列を、要素数と合計(1)がそろった形に直す
         const list = (Array.isArray(arr) && arr.length === count && arr.every(v => typeof v === 'number' && isFinite(v) && v > 0)) ? arr.slice() : Array.from({ length: count }, () => 1);
         const total = list.reduce((a, b) => a + b, 0) || 1;
@@ -12184,6 +12285,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             fontSize: Math.max(8, Math.min(200, (typeof ann.fontSize === 'number' && isFinite(ann.fontSize)) ? ann.fontSize : 14)),
             textAlign: ['left', 'center', 'right'].includes(ann.textAlign) ? ann.textAlign : 'left',
             verticalAlign: ['top', 'middle', 'bottom'].includes(ann.verticalAlign) ? ann.verticalAlign : 'top',
+            // 行の基本の高さ（基準の幅の画像でのpx）・自動で広がらない行・食い違い検出用の署名。不正な値は取り除く（使うときに作り直す）
+            rowBase: (Array.isArray(ann.rowBase) && ann.rowBase.length === rows && ann.rowBase.every(v => typeof v === 'number' && isFinite(v) && v > 0 && v <= 5000)) ? ann.rowBase.slice() : undefined,
+            rowFixed: (Array.isArray(ann.rowFixed) && ann.rowFixed.length === rows) ? ann.rowFixed.map(v => v === true) : undefined,
+            rowSig: (typeof ann.rowSig === 'string' && ann.rowSig.length <= 600) ? ann.rowSig : undefined,
             noMemo: true
         };
     }
@@ -12201,6 +12306,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         }[kind];
         const frame = (kind === 'top' || kind === 'middle' || kind === 'bottom') ? '<path d="M2 2h12M2 14h12" opacity="0.35"/>' : '';
         return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">${frame}${lines.map(d => `<path d="${d}"/>`).join('')}</svg>`;
+    }
+    // 行・列の追加と削除のアイコン（小さな表の絵に、プラス・マイナスの印を付けたもの）
+    function tableStructIconSvg(kind) {
+        const rowIcon = (sign) => `<rect x="2" y="2" width="12" height="7" rx="0.8"/><path d="M2 5.5h12"/>${sign === '+' ? '<path d="M8 11v4M6 13h4"/>' : '<path d="M6 13h4"/>'}`;
+        const colIcon = (sign) => `<rect x="2" y="2" width="7" height="12" rx="0.8"/><path d="M5.5 2v12"/>${sign === '+' ? '<path d="M13 6v4M11 8h4"/>' : '<path d="M11 8h4"/>'}`;
+        const body = { rowAdd: rowIcon('+'), rowDel: rowIcon('-'), colAdd: colIcon('+'), colDel: colIcon('-') }[kind];
+        return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
     }
     function tableBorderPx(zoom) { return Math.max(1, 1 * zoom); }
     function tableCellStyleText(ann, zoom, r, c) { // 1つのセルのCSS
@@ -12921,8 +13033,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
 
     // ★追加: テキストannotationをCanvasに描画する。CSS（改行・背景色・太字等）を正確に再現するため、
     // 手書きでテキストレイアウトを再実装するのではなく、SVGのforeignObjectにDOM要素をそのまま描かせてラスタライズする
-    function drawTextAnnotationToCanvas(ctx, ann, x, y, scale, container, zoomFactor) {
+    function drawTextAnnotationToCanvas(ctx, ann, x, y, scale, container, zoomFactor, fontScaleArg) {
         return new Promise((resolve) => {
+            const fscale = fontScaleArg > 0 ? fontScaleArg : scale; // 文字・余白・枠の倍率（基準の幅がある場合は、それを使う）
             const shapeEl = container.querySelector(`.shape[data-local-id="${ann.localId}"]`);
             // ★修正: ズーム中はテキスト枠が画面上2倍で描画されているため、実測値(offsetWidth/Height)もそのぶん大きい。
             // scaleは既にズーム倍率を打ち消した値なので、実測値側も倍率で割って通常表示時と同じ基準に揃える
@@ -12934,12 +13047,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
 
             const div = document.createElement('div');
             div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-            div.style.fontSize = `${(ann.fontSize || 16) * scale}px`;
+            div.style.fontSize = `${(ann.fontSize || 16) * fscale}px`;
             div.style.color = ann.textColor || '#000000';
             div.style.fontWeight = ann.fontWeight === 'bold' ? 'bold' : 'normal';
             div.style.backgroundColor = ann.bgColor || 'transparent';
             div.style.whiteSpace = 'pre-wrap';
-            div.style.padding = `${2 * scale}px`;
+            div.style.padding = `${2 * fscale}px`;
             div.style.boxSizing = 'border-box';
             div.style.width = `${scaledW}px`;
             div.style.height = `${scaledH}px`;
@@ -12954,7 +13067,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             if (ann.boxed) {
                 // ★追加: 範囲指定のテキスト枠は画面と同じ位置で折り返すよう、画面側の枠(破線1px)と同じ分の余白を取る
                 div.style.overflowWrap = 'break-word';
-                div.style.border = `${Math.max(0.5, 1 * scale)}px solid transparent`;
+                div.style.border = `${Math.max(0.5, 1 * fscale)}px solid transparent`;
             }
             div.textContent = ann.textContent || '';
 
@@ -13046,12 +13159,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         const x = (ann.left / 100) * naturalW;
         const y = (ann.top / 100) * naturalH;
 
+        // ★追加: 文字・表の大きさの倍率。基準の幅がある場合は「実解像度の幅 ÷ 基準の幅」（画面の大きさに左右されない）。無い場合は従来の倍率
+        const fontScale = ((ann.type === 'text' || ann.type === 'table') && ann.refWidth > 0) ? naturalW / ann.refWidth : scale;
         if (ann.type === 'text') {
-            await drawTextAnnotationToCanvas(ctx, ann, x, y, scale, container, zoomFactor);
+            await drawTextAnnotationToCanvas(ctx, ann, x, y, scale, container, zoomFactor, fontScale);
             return;
         }
         if (ann.type === 'table') { // ★追加: 表
-            await drawTableAnnotationToCanvas(ctx, ann, x, y, (ann.width / 100) * naturalW, (ann.height / 100) * naturalH, scale);
+            await drawTableAnnotationToCanvas(ctx, ann, x, y, (ann.width / 100) * naturalW, (ann.height / 100) * naturalH, fontScale);
             return;
         }
 
@@ -13909,7 +14024,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 const before = { fontSize: ann.fontSize || 16 };
                 ann.fontSize = Math.max(8, (ann.fontSize || 16) - 2);
                 const shapeEl = container.querySelector(`.shape[data-local-id="${ann.localId}"]`);
-                if (shapeEl) shapeEl.style.fontSize = `${ann.fontSize * textZoomFactor}px`; // ★修正: ズーム倍率を反映していなかったバグを修正
+                if (shapeEl) shapeEl.style.fontSize = `${ann.fontSize * getAnnotationScale(ann, container)}px`; // ★変更: 画像の表示幅に合わせた倍率
                 subActions.push({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: { fontSize: ann.fontSize } });
             });
             if (subActions.length === 1) pushUndoAction(subActions[0]);
@@ -13936,7 +14051,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 const before = { fontSize: ann.fontSize || 16 };
                 ann.fontSize = Math.min(200, (ann.fontSize || 16) + 2);
                 const shapeEl = container.querySelector(`.shape[data-local-id="${ann.localId}"]`);
-                if (shapeEl) shapeEl.style.fontSize = `${ann.fontSize * textZoomFactor}px`; // ★修正: ズーム倍率を反映していなかったバグを修正
+                if (shapeEl) shapeEl.style.fontSize = `${ann.fontSize * getAnnotationScale(ann, container)}px`; // ★変更: 画像の表示幅に合わせた倍率
                 subActions.push({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: { fontSize: ann.fontSize } });
             });
             if (subActions.length === 1) pushUndoAction(subActions[0]);
