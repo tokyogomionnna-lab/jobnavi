@@ -816,8 +816,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     .shape-table .tbl-col-handle, .shape-table .tbl-row-handle { position: absolute; z-index: 4; background: transparent; }
     .shape-table .tbl-col-handle { top: 0; height: 100%; width: 9px; margin-left: -4px; cursor: col-resize; }
     .shape-table .tbl-row-handle { left: 0; width: 100%; height: 9px; margin-top: -4px; cursor: row-resize; }
-    .shape-table:hover .tbl-col-handle, .shape-table:focus-within .tbl-col-handle, .shape-table:focus .tbl-col-handle,
-    .shape-table:hover .tbl-row-handle, .shape-table:focus-within .tbl-row-handle, .shape-table:focus .tbl-row-handle { background: rgba(0, 86, 179, 0.25); }
+    /* 列・行の境界のつまみ: つかめる範囲は9pxのまま、見える帯は、枠線（1px）より少し太い3pxにする */
+    .shape-table:hover .tbl-col-handle, .shape-table:focus-within .tbl-col-handle, .shape-table:focus .tbl-col-handle { background: linear-gradient(to right, transparent 3px, rgba(0, 86, 179, 0.55) 3px, rgba(0, 86, 179, 0.55) 6px, transparent 6px); }
+    .shape-table:hover .tbl-row-handle, .shape-table:focus-within .tbl-row-handle, .shape-table:focus .tbl-row-handle { background: linear-gradient(to bottom, transparent 3px, rgba(0, 86, 179, 0.55) 3px, rgba(0, 86, 179, 0.55) 6px, transparent 6px); }
+    .shape-table .tbl-col-handle:hover { background: linear-gradient(to right, transparent 2px, rgba(0, 86, 179, 0.85) 2px, rgba(0, 86, 179, 0.85) 7px, transparent 7px); }
+    .shape-table .tbl-row-handle:hover { background: linear-gradient(to bottom, transparent 2px, rgba(0, 86, 179, 0.85) 2px, rgba(0, 86, 179, 0.85) 7px, transparent 7px); }
+    .table-align-btn { width: 24px; height: 22px; border: 1px solid #ccc; background: #f8f9fa; border-radius: 3px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: #333; }
+    .table-align-btn svg { width: 14px; height: 14px; }
+    .table-align-btn:hover { background: #e9ecef; }
+    .table-align-btn.active { background: #0056b3; border-color: #0056b3; color: #fff; }
+    body.theme-blueprint .table-align-btn { background: #12283F; border-color: #24466B; color: #DCE8F2; }
+    body.theme-blueprint .table-align-btn.active { background: #0056b3; border-color: #4FC3E8; color: #fff; }
     .shape-table .tbl-move-handle { position: absolute; left: -22px; top: -22px; width: 20px; height: 20px; line-height: 20px; text-align: center; font-size: 13px; background: #0056b3; color: #fff; border-radius: 4px; cursor: grab; z-index: 6; display: none; user-select: none; }
     .shape-table:hover .tbl-move-handle, .shape-table:focus-within .tbl-move-handle, .shape-table:focus .tbl-move-handle { display: block; }
     .shape-table:focus .shape-resize-handle, .shape-table:focus-within .shape-resize-handle { display: block; z-index: 8; }
@@ -2162,7 +2171,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.12.0';
+    const APP_VERSION = '1.13.0';
     const APP_RELEASE_DATE = '2026-11-04';
     let db;
 
@@ -8854,6 +8863,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     function buildTableShapeContent(shape, ann, step, container, isZoomed, isLocked, setEditing, reRenderCallback) {
         const zoom = isZoomed ? 2 : 1;
         const save = async () => { try { await dbOp('steps', 'readwrite', s => s.put(step)); } catch (err) { alert('操作に失敗しました: ' + err.message); } };
+        let toolbarEl = null; // ミニツールバー（セルを選んでいる間だけ、表の上（上端に近いときは下）に出す）
+        // ツールバーの位置を、今の表の位置・高さに合わせる（表の高さが変わったときも、表に重ならないように、呼び直す）
+        function positionToolbar() {
+            if (!toolbarEl) return;
+            toolbarEl.style.left = `${ann.left}%`;
+            // 表の上に、ツールバーが収まる余白（約64px）があれば、上に置く（表が大きくなっても、ツールバーは動かない）。余白がなければ、表の下に置く
+            const containerH = container.getBoundingClientRect().height || 1;
+            if ((ann.top / 100) * containerH < 64) { toolbarEl.style.top = `calc(${ann.top + ann.height}% + 4px)`; toolbarEl.style.transform = ''; }
+            else { toolbarEl.style.top = `calc(${ann.top}% - 4px)`; toolbarEl.style.transform = 'translateY(-100%)'; }
+        }
         const grid = document.createElement('div');
         grid.className = 'tbl-grid';
         grid.style.cssText = `position:absolute; inset:0; display:grid; box-sizing:border-box; background:#ffffff; border:${tableBorderPx(zoom)}px solid #333; font-size:${(ann.fontSize || 14) * zoom}px; color:${ann.textColor || '#000000'}; font-family:${TABLE_FONT_STACK};`;
@@ -8884,9 +8903,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             if (rect.height <= 0 || containerH <= 0) return null;
             const rowPx = ann.rowHeights.map(f => f * rect.height);
             let grew = false;
+            const contentPx = measureContentRowPx(); // 文字に必要な高さ（縦の揃えを、上・中央・下にしても、正しく測れる）
             for (let r = 0; r < ann.rows; r++) {
-                let need = 0;
-                cellEls[r].forEach(el => { need = Math.max(need, el.scrollHeight); });
+                const need = contentPx[r];
                 if (need > rowPx[r] + 0.5) { rowPx[r] = need; grew = true; }
             }
             if (!grew) return null;
@@ -8907,24 +8926,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             colHandles.forEach((h, i) => { acc += ann.colWidths[i]; h.style.left = `${acc * 100}%`; });
             acc = 0;
             rowHandles.forEach((h, i) => { acc += ann.rowHeights[i]; h.style.top = `${acc * 100}%`; });
+            positionToolbar(); // 表の大きさが変わったら、ツールバーも、位置を合わせる
         };
         const startBorderDrag = (kind, index, e) => {
             if (e.button !== 0 || isAnnotationEditLocked(step.id)) return;
             e.preventDefault(); e.stopPropagation();
             const rect = shape.getBoundingClientRect();
             const startPos = kind === 'col' ? e.clientX : e.clientY;
-            const startColWidths = ann.colWidths.slice(), startRowHeights = ann.rowHeights.slice(), startHeight = ann.height;
+            const startColWidths = ann.colWidths.slice(), startRowHeights = ann.rowHeights.slice(), startHeight = ann.height, startWidth = ann.width;
             const ctrl = new AbortController();
-            const minColF = Math.min(0.5 / ann.cols, (TABLE_MIN_COL_PX * zoom) / Math.max(rect.width, 1));
-            const minRowF = (TABLE_MIN_ROW_PX * zoom) / Math.max(rect.height, 1);
+            // 表の右端が、キャンバス（余白を含む表示範囲）の外へ出ないようにする上限
+            const bounds = getMarginClampBounds(container, container.closest('.media-area'));
+            const containerW = container.getBoundingClientRect().width;
+            const maxTotalPx = Math.max(rect.width, ((bounds.maxX - ann.left) / 100) * containerW);
             const onMove = (ev) => {
                 if (kind === 'col') {
-                    // 隣の列と幅をやりとりする（表全体の幅は、そのまま）
-                    const total = startColWidths[index] + startColWidths[index + 1];
-                    const a = Math.max(minColF, Math.min(total - minColF, startColWidths[index] + (ev.clientX - startPos) / rect.width));
-                    const next = startColWidths.slice(); next[index] = a; next[index + 1] = total - a;
-                    ann.colWidths = next;
-                    grid.style.gridTemplateColumns = tableGridTemplate(next);
+                    // つかんだ枠線の左の列の幅だけを変える（ほかの列の幅は、そのまま。表全体の幅が変わる）。右端の枠線は、最後の列の幅を変える
+                    const startPx = startColWidths.map(f => f * rect.width);
+                    const others = startPx.reduce((a, b) => a + b, 0) - startPx[index];
+                    const newW = Math.max(TABLE_MIN_COL_PX * zoom, Math.min(maxTotalPx - others, startPx[index] + (ev.clientX - startPos)));
+                    const newPx = startPx.slice(); newPx[index] = newW;
+                    const totalPx = newPx.reduce((a, b) => a + b, 0);
+                    ann.colWidths = newPx.map(v => v / totalPx);
+                    ann.width = (totalPx / containerW) * 100;
+                    shape.style.width = `${ann.width}%`;
+                    grid.style.gridTemplateColumns = tableGridTemplate(ann.colWidths);
                 } else {
                     // この行の高さを変える（ほかの行の高さは、そのままで、表全体の高さが変わる）
                     const startPx = startRowHeights.map(f => f * rect.height);
@@ -8944,7 +8970,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 if (kind === 'col') {
                     // 幅が変わって文字の折り返しが増えたら、行の高さも広げる
                     const fit = autoFitRows();
-                    before = { colWidths: startColWidths }; after = { colWidths: ann.colWidths };
+                    before = { colWidths: startColWidths, width: startWidth }; after = { colWidths: ann.colWidths, width: ann.width };
                     if (fit) { before.rowHeights = startRowHeights; before.height = startHeight; after.rowHeights = fit.rowHeights; after.height = fit.height; }
                     if (JSON.stringify(startColWidths) === JSON.stringify(ann.colWidths) && !fit) return;
                 } else {
@@ -8958,12 +8984,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             document.addEventListener('mouseup', onUp, { signal: ctrl.signal });
         };
         if (!isLocked) {
-            for (let i = 0; i < ann.cols - 1; i++) {
+            for (let i = 0; i < ann.cols; i++) { // 各列の右の枠線（最後は、表の右端）。つかんだ枠線の左の列の幅だけが変わる
                 const h = document.createElement('div');
                 h.className = 'tbl-col-handle';
                 h.addEventListener('mousedown', (e) => startBorderDrag('col', i, e));
                 h.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); equalizeCols(); }); // ダブルクリックで、すべての列を同じ幅にする
-                h.title = 'ドラッグして列の幅を変える（ダブルクリックで、すべての列を同じ幅に）';
+                h.title = 'ドラッグして、この列の幅を変える（ダブルクリックで、すべての列を同じ幅に）';
                 shape.appendChild(h); colHandles.push(h);
             }
             for (let i = 0; i < ann.rows; i++) { // 最後の行の下の境界は、表全体の高さ（右下のつまみ）で変えるので、行の境界は、最後を含めて、高さだけを変える
@@ -9105,20 +9131,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         };
 
         // --- ミニツールバー（文字サイズ・揃え）。セルを選んでいる間、表の上に出す ---
-        let toolbarEl = null;
         const removeToolbar = () => { if (toolbarEl) { toolbarEl.remove(); toolbarEl = null; } };
         const applyTableStyle = () => {
             grid.style.fontSize = `${(ann.fontSize || 14) * zoom}px`;
-            cellEls.forEach((row, r) => row.forEach((el, c) => { el.style.textAlign = ann.textAlign; }));
+            const vAlignMap = { top: 'flex-start', middle: 'center', bottom: 'flex-end' };
+            cellEls.forEach((row, r) => row.forEach((el, c) => { el.style.textAlign = ann.textAlign; el.style.justifyContent = vAlignMap[ann.verticalAlign] || 'flex-start'; }));
         };
         const showToolbar = () => {
             if (toolbarEl || isLocked) return;
             toolbarEl = document.createElement('div');
             toolbarEl.className = 'text-mini-toolbar table-mini-toolbar';
-            toolbarEl.style.left = `${ann.left}%`;
-            // 表の上に置く（高さが変わっても、表に重ならないよう、下端を表の上端に合わせて、上へ伸ばす）。表がキャンバスの上端に近いときは、表の下に置く
-            if (ann.top < 14) toolbarEl.style.top = `calc(${ann.top + ann.height}% + 4px)`;
-            else { toolbarEl.style.top = `calc(${ann.top}% - 4px)`; toolbarEl.style.transform = 'translateY(-100%)'; }
+            positionToolbar(); // 表の上に置く（下端を表の上端に合わせて、上へ伸ばす）。表がキャンバスの上端に近いときは、表の下に置く
             // ＋−ボタンなどの連打が、ダブルクリックとして、キャンバスのズームを切り替えないようにする（文字のツールバーと同じ）
             toolbarEl.addEventListener('dblclick', (ev) => ev.stopPropagation());
             toolbarEl.addEventListener('mousedown', (ev) => ev.stopPropagation());
@@ -9148,19 +9171,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             plus.addEventListener('click', (ev) => { ev.stopPropagation(); changeFontSize((ann.fontSize || 14) + 1); });
             toolbarEl.appendChild(minus); toolbarEl.appendChild(sizeInput); toolbarEl.appendChild(plus);
             const div = document.createElement('div'); div.className = 'text-toolbar-divider'; toolbarEl.appendChild(div);
-            [['left', '左', '左揃え'], ['center', '中', '中央揃え'], ['right', '右', '右揃え']].forEach(([val, label, title]) => {
-                const b = mkBtn('text-bold-btn' + (ann.textAlign === val ? ' active' : ''), label, title);
-                b.addEventListener('click', async (ev) => {
-                    ev.stopPropagation();
-                    if (ann.textAlign === val) return;
-                    const before = { textAlign: ann.textAlign };
-                    ann.textAlign = val; applyTableStyle();
-                    toolbarEl.querySelectorAll('.text-bold-btn').forEach(x => x.classList.toggle('active', x.title === title));
-                    pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: { textAlign: val } });
-                    await save();
+            // 揃えのボタン（文字ではなくアイコン）。横: 左・中央・右 / 縦: 上・中央・下。どちらも、表全体に適用する
+            const addAlignGroup = (field, items) => {
+                const btns = [];
+                items.forEach(([val, title]) => {
+                    const b = document.createElement('button');
+                    b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+                    b.className = 'table-align-btn' + ((ann[field] || items[0][0]) === val ? ' active' : '');
+                    b.innerHTML = tableAlignIconSvg(val);
+                    b.addEventListener('mousedown', (ev) => ev.preventDefault());
+                    b.addEventListener('click', async (ev) => {
+                        ev.stopPropagation();
+                        if ((ann[field] || items[0][0]) === val) return;
+                        const before = { [field]: ann[field] || items[0][0] };
+                        ann[field] = val; applyTableStyle();
+                        btns.forEach(x => x.classList.toggle('active', x === b));
+                        pushUndoAction({ type: 'transform', stepId: step.id, localId: ann.localId, before, after: { [field]: val } });
+                        await save();
+                    });
+                    btns.push(b);
+                    toolbarEl.appendChild(b);
                 });
-                toolbarEl.appendChild(b);
-            });
+            };
+            addAlignGroup('textAlign', [['left', '左揃え'], ['center', '中央揃え'], ['right', '右揃え']]);
+            const divV = document.createElement('div'); divV.className = 'text-toolbar-divider'; toolbarEl.appendChild(divV);
+            addAlignGroup('verticalAlign', [['top', '上揃え（セルの上に寄せる）'], ['middle', '上下中央揃え'], ['bottom', '下揃え（セルの下に寄せる）']]);
             // 行・列の追加と削除（選んでいるセルの行・列が基準。行・列は、下・右に追加する）
             const div2 = document.createElement('div'); div2.className = 'text-toolbar-divider'; toolbarEl.appendChild(div2);
             const mkStruct = (text, title, enabled, handler) => {
@@ -9214,6 +9249,19 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                     if (idx >= 0 && idx < flat.length) {
                         const target = flat[idx]; target.focus();
                         const range = document.createRange(); range.selectNodeContents(target); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+                    }
+                } else if (ev.key === 'Enter') {
+                    // Enter: 下のセルへ移動（Excelと同じ）。Shift+Enter: セル内で改行（標準の動作）。
+                    // 日本語の変換中のEnter（変換の確定）は、移動せず、そのまま通す
+                    ev.stopPropagation();
+                    if (ev.isComposing || ev.keyCode === 229) return;
+                    if (!ev.shiftKey) {
+                        ev.preventDefault();
+                        const below = cellEls[r + 1] && cellEls[r + 1][c];
+                        if (below) {
+                            below.focus();
+                            const range = document.createRange(); range.selectNodeContents(below); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+                        }
                     }
                 } else if (ev.key === 'Escape') { ev.stopPropagation(); el.blur(); }
                 else { ev.stopPropagation(); } // 入力中の文字キー・Delete・Backspace・Ctrl+Zなどが、図形の削除・取り消しに届かないようにする
@@ -12104,7 +12152,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             colWidths: Array.from({ length: cols }, () => 1 / cols),
             rowHeights: Array.from({ length: rows }, () => 1 / rows),
             cells: Array.from({ length: rows }, () => Array.from({ length: cols }, () => '')),
-            fontSize: 14, textAlign: 'left', textColor: '#000000',
+            fontSize: 14, textAlign: 'left', verticalAlign: 'top', textColor: '#000000',
             num: null, isLine: false, memo: '', localId: generateId(), noMemo: true
         };
     }
@@ -12135,15 +12183,30 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             rowHeights: normalizeFractions(ann.rowHeights, rows),
             fontSize: Math.max(8, Math.min(200, (typeof ann.fontSize === 'number' && isFinite(ann.fontSize)) ? ann.fontSize : 14)),
             textAlign: ['left', 'center', 'right'].includes(ann.textAlign) ? ann.textAlign : 'left',
+            verticalAlign: ['top', 'middle', 'bottom'].includes(ann.verticalAlign) ? ann.verticalAlign : 'top',
             noMemo: true
         };
     }
     // 表の見た目（画面と、印刷・PDF出力・画像化で同じ）。zoomは画面のズーム倍率や、出力時の拡大率
     const TABLE_FONT_STACK = '"Yu Gothic UI","Yu Gothic","游ゴシック","Meiryo","メイリオ","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
+    // 揃えボタンのアイコン（横: 左・中央・右 / 縦: 上・中央・下）
+    function tableAlignIconSvg(kind) {
+        const lines = {
+            left: ['M2 3h12', 'M2 6.5h8', 'M2 10h12', 'M2 13.5h8'],
+            center: ['M2 3h12', 'M4 6.5h8', 'M2 10h12', 'M4 13.5h8'],
+            right: ['M2 3h12', 'M6 6.5h8', 'M2 10h12', 'M6 13.5h8'],
+            top: ['M2 2h12', 'M4 5.5h8', 'M4 8.5h5'],
+            middle: ['M4 5.5h8', 'M4 8.5h5', 'M4 11.5h8'],
+            bottom: ['M2 14h12', 'M4 7.5h8', 'M4 10.5h5']
+        }[kind];
+        const frame = (kind === 'top' || kind === 'middle' || kind === 'bottom') ? '<path d="M2 2h12M2 14h12" opacity="0.35"/>' : '';
+        return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">${frame}${lines.map(d => `<path d="${d}"/>`).join('')}</svg>`;
+    }
     function tableBorderPx(zoom) { return Math.max(1, 1 * zoom); }
     function tableCellStyleText(ann, zoom, r, c) { // 1つのセルのCSS
         const bw = tableBorderPx(zoom);
-        return `box-sizing:border-box; overflow:hidden; padding:${1 * zoom}px ${4 * zoom}px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.35; text-align:${['left', 'center', 'right'].includes(ann.textAlign) ? ann.textAlign : 'left'}; ` +
+        const vAlign = { top: 'flex-start', middle: 'center', bottom: 'flex-end' }[ann.verticalAlign] || 'flex-start';
+        return `box-sizing:border-box; overflow:hidden; display:flex; flex-direction:column; justify-content:${vAlign}; padding:${1 * zoom}px ${4 * zoom}px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.35; text-align:${['left', 'center', 'right'].includes(ann.textAlign) ? ann.textAlign : 'left'}; ` +
             `${c < ann.cols - 1 ? `border-right:${bw}px solid #333;` : ''} ${r < ann.rows - 1 ? `border-bottom:${bw}px solid #333;` : ''}`;
     }
     function tableGridTemplate(fractions) { return fractions.map(f => `${(f * 100).toFixed(4)}%`).join(' '); }
