@@ -2173,7 +2173,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.15.0';
+    const APP_VERSION = '1.15.1';
     const APP_RELEASE_DATE = '2026-11-04';
     let db;
 
@@ -5613,7 +5613,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                                     shape.style.color = ann.textColor || '#000000';
                                     shape.style.fontSize = `${ann.fontSize || 16}px`;
                                     shape.dataset.baseFontSize = String(ann.fontSize || 16); // ★追加: 用紙サイズに合わせた文字サイズ補正で使う
-                                    if (ann.refWidth > 0) shape.dataset.refWidth = String(ann.refWidth); // ★追加: 基準の幅（印刷時のウィンドウの大きさに左右されないようにする）
+                                    if (hasValidRefWidth(ann)) shape.dataset.refWidth = String(ann.refWidth); // ★追加: 基準の幅（印刷時のウィンドウの大きさに左右されないようにする）
                                     shape.style.fontWeight = ann.fontWeight || 'normal';
                                     // ★追加: 画面表示と同じく縦書きにも対応する
                                     shape.style.writingMode = ann.vertical ? 'vertical-rl' : '';
@@ -5637,7 +5637,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                                     const gridP = document.createElement('div');
                                     gridP.className = 'tbl-grid-print';
                                     gridP.dataset.baseFontSize = String(tp.fontSize);
-                                    if (ann.refWidth > 0) gridP.dataset.refWidth = String(ann.refWidth);
+                                    if (hasValidRefWidth(ann)) gridP.dataset.refWidth = String(ann.refWidth);
                                     gridP.style.cssText = `position:absolute; inset:0; display:grid; box-sizing:border-box; background:#ffffff; border:1px solid #333; font-size:${tp.fontSize}px; color:${ann.textColor || '#000000'}; font-family:${TABLE_FONT_STACK};`;
                                     gridP.style.gridTemplateColumns = tableGridTemplate(tp.colWidths);
                                     gridP.style.gridTemplateRows = tableGridTemplate(tp.rowHeights);
@@ -5732,7 +5732,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                         // ★変更: 基準の幅(refWidth)がある文字・表は、「用紙上の画像の幅 ÷ 基準の幅」で拡縮する（印刷するときの、ウィンドウの大きさに左右されない）。
                         // 基準の幅が無いもの（まだ開いていない手順の注釈）は、従来どおり、印刷時の画面の幅との比
                         const pageRatio = screenContainerW > 0 ? printW / screenContainerW : 0;
-                        const ratioOf = (el) => { const rw = parseFloat(el.dataset.refWidth || ''); return rw > 0 ? printW / rw : pageRatio; };
+                        const ratioOf = (el) => { const rw = parseFloat(el.dataset.refWidth || ''); return rw >= MIN_VALID_REF_WIDTH ? printW / rw : pageRatio; };
                         page.querySelectorAll('.tbl-grid-print').forEach(g => { // ★追加: 表の文字サイズ・余白・罫線の太さも、用紙上の大きさに合わせる
                             const ratio = ratioOf(g);
                             if (!(ratio > 0)) return;
@@ -9486,7 +9486,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 const { tSize, g, left, top } = tableGeometryAt(e.clientX, e.clientY);
                 const newAnn = createTableAnnotation(tSize.rows, tSize.cols, left, top, g.wPct, g.hPct);
                 newAnn.fontSize = g.fontSize;
-                newAnn.refWidth = container.getBoundingClientRect().width / (container.classList.contains('zoomed') ? 2 : 1); // 文字・表の大きさの基準の幅
+                if (isContainerSized(container)) newAnn.refWidth = container.getBoundingClientRect().width / (container.classList.contains('zoomed') ? 2 : 1); // 文字・表の大きさの基準の幅（枠の大きさが決まっているときだけ。無ければ、あとで付ける）
                 clearAnnotationSelection(container);
                 step.annotations = step.annotations || [];
                 const newIndex = step.annotations.length;
@@ -9729,7 +9729,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                             newAnn = {
                                 type: 'text', left: finalLeft, top: finalTop,
                                 width: w, height: h, num: null, isLine: false, memo: '', localId: generateId(),
-                                refWidth: rect.width / (container.classList.contains('zoomed') ? 2 : 1), // ★追加: 文字の大きさの基準の幅
+                                ...(rect.width >= MIN_VALID_REF_WIDTH ? { refWidth: rect.width / (container.classList.contains('zoomed') ? 2 : 1) } : {}), // ★追加: 文字の大きさの基準の幅
                                 textContent: '', textColor: '#000000', fontSize: 16, bgColor: null, fontWeight: 'normal',
                                 ...(isTextBox ? { boxed: true, textAlign: 'left' } : {}) // ★追加: 範囲指定のテキスト枠は左揃えで始める
                             };
@@ -9962,7 +9962,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             } : {}),
             memoColor: [null, ...TAB_COLOR_PRESETS].includes(ann.memoColor) ? ann.memoColor : null, // ★追加: メモ欄の背景色
             ...(ann.type === 'table' ? sanitizeTableFields(ann) : {}), // ★追加: 表（行・列・列幅・行の高さ・セルの文字・文字サイズ・揃え）
-            ...((ann.type === 'text' || ann.type === 'table') ? { refWidth: (typeof ann.refWidth === 'number' && isFinite(ann.refWidth) && ann.refWidth > 0) ? Math.min(ann.refWidth, 20000) : undefined } : {}) // ★追加: 文字・表の基準の幅（不正な値は取り除き、最初に開いたときに付け直す）
+            ...((ann.type === 'text' || ann.type === 'table') ? { refWidth: (typeof ann.refWidth === 'number' && isFinite(ann.refWidth) && ann.refWidth >= 100) ? Math.min(ann.refWidth, 20000) : undefined } : {}) // ★追加: 文字・表の基準の幅（不正な値は取り除き、最初に開いたときに付け直す）
         };
     }
 
@@ -12216,17 +12216,24 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // 画像の表示幅が変わる（ウィンドウの大きさを変える・サイドバーを開閉する・拡大表示）と、文字・余白・罫線も、同じ割合で拡縮する。
     // これにより、ウィンドウの大きさを変えても、画像に対する文字の大きさが、変わらない（印刷・画像化も、同じ）。
     // refWidthが無い（以前に作った）注釈は、最初に開いたときの画像の表示幅（拡大表示中は、その半分）を基準にして保存する
+    // 基準の幅は、画像が読み込まれて、枠の大きさが決まってから付ける。画像の読み込み前の、仮の小さな幅(2pxなど)が、基準として
+    // 保存されてしまうと、文字が異常に大きくなるため、100px未満は、不正な値として扱い、使わず、あとで付け直す
+    const MIN_VALID_REF_WIDTH = 100;
+    function hasValidRefWidth(a) { return !!a && typeof a.refWidth === 'number' && isFinite(a.refWidth) && a.refWidth >= MIN_VALID_REF_WIDTH; }
+    function isContainerSized(container) { // 画像が読み込まれて、枠の大きさが決まっているか
+        const img = container.querySelector('img.main-img');
+        return !!(img && img.complete && img.naturalWidth > 0 && container.getBoundingClientRect().width >= MIN_VALID_REF_WIDTH);
+    }
     function getAnnotationScale(ann, container) {
         const w = container.getBoundingClientRect().width;
-        if (!(ann && ann.refWidth > 0) || !(w > 0)) return container.classList.contains('zoomed') ? 2 : 1; // 基準の幅が決まる前は、従来どおり（拡大表示で2倍）
+        if (!hasValidRefWidth(ann) || !(w >= MIN_VALID_REF_WIDTH)) return container.classList.contains('zoomed') ? 2 : 1; // 基準の幅が決まる前は、従来どおり（拡大表示で2倍）
         return w / ann.refWidth;
     }
-    function ensureAnnotationRefWidths(step, container) { // 基準の幅が無い文字・表に、今の表示幅を基準として付ける。付けたらtrueを返す
-        const w = container.getBoundingClientRect().width;
-        if (!(w > 0)) return false;
-        const base = w / (container.classList.contains('zoomed') ? 2 : 1);
+    function ensureAnnotationRefWidths(step, container) { // 基準の幅が無い（または、不正な）文字・表に、今の表示幅を基準として付ける。付けたらtrueを返す
+        if (!isContainerSized(container)) return false; // 画像の読み込み前など、枠の大きさが決まっていないときは、付けない
+        const base = container.getBoundingClientRect().width / (container.classList.contains('zoomed') ? 2 : 1);
         let changed = false;
-        (step.annotations || []).forEach(a => { if ((a.type === 'text' || a.type === 'table') && !(a.refWidth > 0)) { a.refWidth = base; changed = true; } });
+        (step.annotations || []).forEach(a => { if ((a.type === 'text' || a.type === 'table') && !hasValidRefWidth(a)) { a.refWidth = base; changed = true; } });
         return changed;
     }
     // 表示幅が変わったときに、文字・表の大きさを、基準の幅に合わせて直す（描画し直さず、その場で直す）
@@ -13160,7 +13167,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         const y = (ann.top / 100) * naturalH;
 
         // ★追加: 文字・表の大きさの倍率。基準の幅がある場合は「実解像度の幅 ÷ 基準の幅」（画面の大きさに左右されない）。無い場合は従来の倍率
-        const fontScale = ((ann.type === 'text' || ann.type === 'table') && ann.refWidth > 0) ? naturalW / ann.refWidth : scale;
+        const fontScale = ((ann.type === 'text' || ann.type === 'table') && hasValidRefWidth(ann)) ? naturalW / ann.refWidth : scale;
         if (ann.type === 'text') {
             await drawTextAnnotationToCanvas(ctx, ann, x, y, scale, container, zoomFactor, fontScale);
             return;
