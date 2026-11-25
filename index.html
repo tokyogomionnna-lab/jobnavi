@@ -2197,7 +2197,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.17.6';
+    const APP_VERSION = '1.17.7';
     const APP_RELEASE_DATE = '2026-11-25';
     let db;
 
@@ -3039,7 +3039,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加(v1.17.6): 診断用。自動バックアップの動き(予約・開始・結果)を直近40件まで記録し、「診断」で確認できるようにする
     const autoBackupLog = [];
     let autoBackupInProgressSince = 0;   // 保存処理を始めた時刻（終わらないまま止まっていないかの確認用）
-    let autoBackupQueued = false;        // 保存中に次の保存の依頼が来たら、終わった直後にもう一度保存する
+    let autoBackupQueued = false;
+    let autoBackupGeneration = 0;      // ★追加(v1.17.7): 保存先を変えるたびに増やす。古い保存先の処理の結果は無視する        // 保存中に次の保存の依頼が来たら、終わった直後にもう一度保存する
     let autoBackupLastAttemptAt = 0;
     let autoBackupLastResult = '';
     function abLog(msg) {
@@ -3353,6 +3354,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             return;
         }
         autoBackupInProgress = true;
+        const myGeneration = autoBackupGeneration;
         autoBackupInProgressSince = Date.now();
         autoBackupLastAttemptAt = autoBackupInProgressSince;
         abLog('保存を開始');
@@ -3392,12 +3394,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             abLog(`保存に成功（${Math.round((Date.now() - autoBackupInProgressSince) / 100) / 10}秒）`);
             autoBackupLastResult = '成功';
         } catch (err) {
+            if (myGeneration !== autoBackupGeneration) return; // ★追加(v1.17.7): 保存先を変えた後に、古い保存先の失敗が返ってきた場合は無視する
             abLog(`保存に失敗: ${(err && err.name) || ''} ${(err && err.message) || ''}${err && err.autoBackupStep ? '【' + err.autoBackupStep + '】' : ''}`);
             autoBackupLastResult = `失敗（${(err && err.name) || 'エラー'}）`;
             autoBackupDirtySinceLastSave = true; // 失敗した場合は、データを変更したときなどに再試行する
             // ★変更: 以前は静かに無視していたため、保存先を消されても気づけなかった。アラートは出さず、ボタンを赤にして理由を示す
             reportAutoBackupFailure(err);
         } finally {
+            if (myGeneration !== autoBackupGeneration) return; // ★追加(v1.17.7): 古い保存先の処理は、今の状態を書き換えない
             autoBackupInProgress = false;
             autoBackupInProgressSince = 0;
             if (btn) btn.classList.remove('spinning'); // ★追加
@@ -3567,9 +3571,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         }
         try {
             const pickerOptions = { id: 'procedure-backup', mode: 'readwrite' };
-            if (autoBackupDirHandle) pickerOptions.startIn = autoBackupDirHandle; // 今のフォルダを開いた状態から選べる
+            // ★変更(v1.17.7): 今の保存先(startIn)は渡さない。今の保存先が応答しない状態だと、選び直しまで止まってしまうため
             const dir = await window.showDirectoryPicker(pickerOptions);
-            if (autoBackupDirHandle && await dir.isSameEntry(autoBackupDirHandle)) {
+            // ★変更(v1.17.7): 「同じフォルダか」の確認も、今の保存先が応答しないと止まるため、数秒で打ち切って「別のフォルダ」として進める
+            let sameAsCurrent = false;
+            if (autoBackupDirHandle) {
+                try { sameAsCurrent = await withAutoBackupTimeout(dir.isSameEntry(autoBackupDirHandle), 3000, '同じフォルダかの確認'); }
+                catch (e) { abLog('今の保存先が応答しないため、同じフォルダかの確認を省略'); sameAsCurrent = false; }
+            }
+            if (sameAsCurrent && !autoBackupFailed) {
                 showStatusPopup(anchorEl, '今と同じフォルダです。保存先は変更しませんでした', { autoHideMs: 2800, spinner: false });
                 return;
             }
@@ -3580,6 +3590,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             }
             // 保存中なら終わるのを待つ（古い保存先への書き込みと、新しい保存先の初回バックアップが重ならないようにする）
             for (let i = 0; i < 50 && autoBackupInProgress; i++) await new Promise(r => setTimeout(r, 200));
+            // ★追加(v1.17.7): 古い保存先への保存が固まったままなら、それを見捨てて、新しい保存先で保存できるようにする
+            autoBackupGeneration++;
+            if (autoBackupInProgress) { abLog('古い保存先への保存が終わらないため、打ち切って新しい保存先へ切り替え'); autoBackupInProgress = false; autoBackupInProgressSince = 0; autoBackupQueued = false; }
+            clearAutoBackupFailure();
+            abLog(`保存先を変更: ${dir.name}`);
             await dbOp('appSettings', 'readwrite', s => { s.put({ key: 'autoBackupDirHandle', value: dir }); s.delete('autoBackupFileHandle'); });
             autoBackupDirHandle = dir;
             autoBackupFileHandle = null;
