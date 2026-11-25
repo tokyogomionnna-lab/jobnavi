@@ -2197,8 +2197,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.17.0';
-    const APP_RELEASE_DATE = '2026-11-18';
+    const APP_VERSION = '1.17.5';
+    const APP_RELEASE_DATE = '2026-11-25';
     let db;
 
     const QUALITY_SETTINGS = {
@@ -3273,7 +3273,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
 
     // ★追加: 保存に失敗したとき、静かに失敗したままにせず、ボタンを赤にして理由を表示する。
     // 保存先の削除・移動・名前の変更で元の場所が見つからない場合は、保存先フォルダの選び直しを案内する。最初の1回だけ画面にも案内を出す
+    // ★追加: 保存先の確認が「いつまでも返ってこない」場合（ネットワークドライブ・OneDrive等がオフラインのとき等）に、
+    // 画面が無反応のままにならないよう、一定時間で失敗として扱う
+    function withAutoBackupTimeout(promise, ms = 8000, label = '') {
+        return new Promise((resolve, reject) => {
+            const t = setTimeout(() => { const e = new Error('保存先から応答がありません'); e.name = 'TimeoutError'; e.autoBackupStep = label; reject(e); }, ms);
+            Promise.resolve(promise).then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+        });
+    }
+    // ★追加: queryPermission が一部の環境で返ってこないことがあるため、一定時間待って返らなければ「確認できない」として'granted'扱いにし、
+    // 実際の書き込みの成否で判断する（書き込めなければ、そのときに許可切れ・保存先エラーとして赤になる）
+    async function queryAutoBackupPermissionSafe(handle, ms = 2500) {
+        try {
+            return await withAutoBackupTimeout(handle.queryPermission({ mode: 'readwrite' }), ms);
+        } catch (e) {
+            if (e && e.name === 'TimeoutError') { console.warn('queryPermissionが応答しないため、書き込みで確認します'); return 'granted'; }
+            throw e;
+        }
+    }
     function autoBackupErrorText(err) {
+        if (err && err.name === 'TimeoutError') return '保存先から応答がありません' + (err.autoBackupStep ? `【${err.autoBackupStep}】` : '') + '（ネットワークドライブやOneDriveなどが接続されていない可能性があります）。接続を確認するか、保存先フォルダを変更してください';
         if (err && err.name === 'NotFoundError') return '保存先が見つかりません（削除・移動・名前の変更の可能性があります）。保存先フォルダを変更してください';
         if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) return '保存先に書き込めません（許可が取り消された可能性があります）。保存先フォルダを選び直してください';
         return `保存先に保存できませんでした（${(err && err.name) || 'エラー'}）。保存先フォルダを確認してください`;
@@ -3321,14 +3340,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         if (floatingBtn) floatingBtn.classList.add('spinning');
         autoBackupDirtySinceLastSave = false; // 楽観的にリセット（失敗時は下でtrueに戻す）
         try {
-            const perm = await getAutoBackupHandle().queryPermission({ mode: 'readwrite' });
+            const perm = await queryAutoBackupPermissionSafe(getAutoBackupHandle());
             if (perm !== 'granted') {
                 autoBackupDirtySinceLastSave = true; // ★追加: 許可が戻ったときに、保存し直せるよう印を残す
                 updateAutoBackupButtonStyle('permission-needed');
                 return;
             }
             if (autoBackupDirHandle) {
-                await writeBackupToDirectory(autoBackupDirHandle); // ★追加: フォルダ保存(最新版+世代保存)
+                await withAutoBackupTimeout(writeBackupToDirectory(autoBackupDirHandle), 180000, '書き込み'); // ★追加: フォルダ保存(最新版+世代保存)。いつまでも終わらない場合は失敗として扱う
             } else {
                 // 従来方式: 1つのファイルを上書きする
                 // ★修正: 巨大な文字列を作らず、生成した断片を順にファイルへ書き込む(メモリ負荷の軽減)
@@ -3405,14 +3424,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             const rec = (dirRec && dirRec.value) ? dirRec : await dbOp('appSettings', 'readonly', s => s.get('autoBackupFileHandle'));
             if (rec && rec.value) {
                 if (dirRec && dirRec.value) autoBackupDirHandle = rec.value; else autoBackupFileHandle = rec.value;
-                const perm = await getAutoBackupHandle().queryPermission({ mode: 'readwrite' });
+                let perm;
+                try {
+                    perm = await queryAutoBackupPermissionSafe(getAutoBackupHandle());
+                } catch (permErr) {
+                    // ★追加: 許可の確認に失敗したときも、無反応にせず、赤にして、ボタンから対処できるようにする
+                    console.warn('自動バックアップの許可確認に失敗しました:', permErr);
+                    reportAutoBackupFailure(permErr);
+                    return;
+                }
                 if (perm === 'granted') {
                     startAutoBackupPeriodicTimer();
                     updateAutoBackupButtonStyle('enabled');
                     // ★追加: 保存先のフォルダ(またはファイル)が、削除・移動・名前の変更で無くなっていないか確認する
                     try {
-                        if (autoBackupDirHandle) { await autoBackupDirHandle.entries().next(); }
-                        else { await autoBackupFileHandle.getFile(); }
+                        if (autoBackupDirHandle) { await withAutoBackupTimeout(autoBackupDirHandle.entries().next(), 8000, 'フォルダの内容確認'); }
+                        else { await withAutoBackupTimeout(autoBackupFileHandle.getFile(), 8000, 'ファイルの確認'); }
                     } catch (missingErr) {
                         reportAutoBackupFailure(missingErr);
                     }
@@ -3421,7 +3448,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                 }
             }
         } catch (err) {
-            // 保存されていない、または壊れている場合は何もしない（自動バックアップ未設定として扱う）
+            // ★変更: 保存先の設定を読み込めたのに、その後で失敗した場合は、未設定扱いにせず赤にする(ボタンを押せば保存先を選び直せる)
+            console.warn('自動バックアップの初期化に失敗しました:', err);
+            if (getAutoBackupHandle()) reportAutoBackupFailure(err);
         }
     }
 
@@ -3435,7 +3464,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
         if (nowMs - autoBackupLastRecheckAt < 5000) return;
         autoBackupLastRecheckAt = nowMs;
         try {
-            const perm = await handle.queryPermission({ mode: 'readwrite' });
+            const perm = await queryAutoBackupPermissionSafe(handle);
             if (perm === 'granted' && autoBackupCurrentState === 'permission-needed') {
                 startAutoBackupPeriodicTimer();
                 autoBackupDirtySinceLastSave = true;
@@ -10536,7 +10565,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             await setupCalendarFeature(); // ★追加: カレンダー・TODO機能の初期化
             await setupArchiveFeature(); // ★追加: 資料庫機能の初期化
             setupQuickTodoWidget(); // ★追加: フローティングTODOクイック追加ウィジェットの初期化
-            initAutoBackup(); // ★追加: 自動バックアップの設定があれば復元する
+            window.__autoBackupInitCalled = true; initAutoBackup(); // ★追加: 自動バックアップの設定があれば復元する
             ensureCalendarSettingsLoaded(); // ★追加: 祝日の修正・メモを読み込む
             renderAppVersionLabel(); // ★追加: サイドバーの下部にアプリ名とバージョンを表示する
             requestPersistentStorage(); // ★追加: ブラウザによる保存データの自動削除から保護するよう要求する
@@ -10598,6 +10627,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
 
         } catch (err) {
             alert('初期化中にエラーが発生しました: ' + err.message);
+            // ★追加: 初期化の途中で失敗しても、自動バックアップの状態表示(赤/緑)だけは必ず復元する
+            if (!window.__autoBackupInitCalled) { window.__autoBackupInitCalled = true; try { initAutoBackup(); } catch (e2) { /* 無視 */ } }
         }
 
         const contextMenu = document.getElementById('context-menu');
@@ -11204,7 +11235,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                     // ・許可が切れている → 許可を求める。許可されたら、すぐ保存して、緑にする
                     // ・すでに許可済みなのに赤い（表示が古い・保存の失敗が残っている） → その場で保存を試し、成功したら緑にする。失敗が続くときだけ、メニューを出す
                     try {
-                        const perm = await getAutoBackupHandle().queryPermission({ mode: 'readwrite' });
+                        const perm = await queryAutoBackupPermissionSafe(getAutoBackupHandle());
                         if (perm !== 'granted') {
                             const newPerm = await getAutoBackupHandle().requestPermission({ mode: 'readwrite' });
                             if (newPerm === 'granted') {
@@ -11231,10 +11262,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                             hideStatusPopup();
                         }
                     } catch (err) {
-                        if (!autoBackupFailed) { // 保存先が見つからないなどで、すでに失敗している場合は、そのままメニューへ進む
-                            showStatusPopup(anchorEl, '許可の確認に失敗しました: ' + err.message, { autoHideMs: 3200, spinner: false });
-                            return;
-                        }
+                        // ★変更: 許可の確認に失敗しても、行き止まりにせず、赤にしてメニュー(保存先の変更・停止)へ進む
+                        console.warn('自動バックアップの許可確認に失敗しました:', err);
+                        if (!autoBackupFailed) reportAutoBackupFailure(err, anchorEl);
                     }
                     // ★変更: 押すとメニューを出す（保存先フォルダの変更／停止）。停止は、これまでと同じ確認を経て行う
                     openAutoBackupMenu(anchorEl, () => changeAutoBackupFolder(anchorEl), () => {
@@ -11257,7 +11287,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                         const dir = await window.showDirectoryPicker({ id: 'procedure-backup', mode: 'readwrite' });
                         const perm = await dir.requestPermission({ mode: 'readwrite' });
                         if (perm !== 'granted') {
-                            showStatusPopup(btnAutoBackup, '書き込み許可が得られませんでした', { autoHideMs: 2800, spinner: false });
+                            showStatusPopup(anchorEl, '書き込み許可が得られませんでした', { autoHideMs: 2800, spinner: false });
                             return;
                         }
                         await dbOp('appSettings', 'readwrite', s => { s.put({ key: 'autoBackupDirHandle', value: dir }); s.delete('autoBackupFileHandle'); });
@@ -11266,19 +11296,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                         autoBackupLastSnapshotAt = null; // 新しいフォルダでは、最初のバックアップですぐ世代を作る
                         updateAutoBackupButtonStyle('enabled');
                         startAutoBackupPeriodicTimer();
-                        showStatusPopup(btnAutoBackup, '初回バックアップを保存中...');
+                        showStatusPopup(anchorEl, '初回バックアップを保存中...');
                         await performAutoBackup();
-                        showStatusPopup(btnAutoBackup, '自動バックアップを開始しました（世代保存あり）', { autoHideMs: 2800, spinner: false });
+                        showStatusPopup(anchorEl, '自動バックアップを開始しました（世代保存あり）', { autoHideMs: 2800, spinner: false });
                     } catch (err) {
                         if (err.name !== 'AbortError') {
+                            console.warn('自動バックアップのフォルダ設定に失敗しました:', err);
                             // 「ドキュメント」「ダウンロード」などのフォルダそのものは、ブラウザの制限で選べないことがある
-                            showStatusPopup(btnAutoBackup, 'フォルダを設定できませんでした。「ドキュメント」等の中にバックアップ用フォルダを作って選んでください: ' + err.message, { autoHideMs: 6000, spinner: false });
+                            showStatusPopup(anchorEl, 'フォルダを設定できませんでした。「ドキュメント」等の中にバックアップ用フォルダを作って選んでください: ' + err.message, { autoHideMs: 6000, spinner: false });
                         }
                     }
                     return;
                 }
                 if (!('showSaveFilePicker' in window)) {
-                    showStatusPopup(btnAutoBackup, 'お使いのブラウザは自動バックアップに未対応です（Chrome/Edge推奨）', { autoHideMs: 3500, spinner: false });
+                    showStatusPopup(anchorEl, 'お使いのブラウザは自動バックアップに未対応です（Chrome/Edge推奨）', { autoHideMs: 3500, spinner: false });
                     return;
                 }
                 try {
@@ -11288,18 +11319,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                     });
                     const perm = await handle.requestPermission({ mode: 'readwrite' });
                     if (perm !== 'granted') {
-                        showStatusPopup(btnAutoBackup, '書き込み許可が得られませんでした', { autoHideMs: 2800, spinner: false });
+                        showStatusPopup(anchorEl, '書き込み許可が得られませんでした', { autoHideMs: 2800, spinner: false });
                         return;
                     }
                     await dbOp('appSettings', 'readwrite', s => s.put({ key: 'autoBackupFileHandle', value: handle }));
                     autoBackupFileHandle = handle;
                     updateAutoBackupButtonStyle('enabled');
                     startAutoBackupPeriodicTimer();
-                    showStatusPopup(btnAutoBackup, '初回バックアップを保存中...');
+                    showStatusPopup(anchorEl, '初回バックアップを保存中...');
                     await performAutoBackup();
-                    showStatusPopup(btnAutoBackup, '自動バックアップを開始しました', { autoHideMs: 2500, spinner: false });
+                    showStatusPopup(anchorEl, '自動バックアップを開始しました', { autoHideMs: 2500, spinner: false });
                 } catch (err) {
-                    if (err.name !== 'AbortError') showStatusPopup(btnAutoBackup, '自動バックアップの設定に失敗しました: ' + err.message, { autoHideMs: 3500, spinner: false });
+                    if (err.name !== 'AbortError') showStatusPopup(anchorEl, '自動バックアップの設定に失敗しました: ' + err.message, { autoHideMs: 3500, spinner: false });
                 }
             });
         }
@@ -15498,6 +15529,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     }
     async function saveCalendarNotes() {
         await dbOp('appSettings', 'readwrite', st => st.put({ key: 'calendarNotes', value: calendarNotes }));
+        if (getAutoBackupHandle()) scheduleAutoBackup(false); // ★追加: メモの変更も自動バックアップの対象にする（バックアップには含まれているのに、変更しても保存されていなかった）
     }
     function noteDateToMs(dateStr, endOfDay) {
         const [y, m, d] = dateStr.split('-').map(Number);
@@ -15897,6 +15929,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     }
     async function saveHolidayOverrides() {
         await dbOp('appSettings', 'readwrite', st => st.put({ key: 'holidayOverrides', value: holidayOverrides }));
+        if (getAutoBackupHandle()) scheduleAutoBackup(false); // ★追加: 祝日の修正も自動バックアップの対象にする
     }
     // 計算だけで求めた祝日・年末年始の名前（修正は反映しない）。monthは0始まり
     function getBaseHolidayName(year, month, day) {
