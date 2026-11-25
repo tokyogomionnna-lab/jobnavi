@@ -2197,7 +2197,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.17.7';
+    const APP_VERSION = '1.17.8';
     const APP_RELEASE_DATE = '2026-11-25';
     let db;
 
@@ -3425,7 +3425,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             const modeLine = autoBackupDirHandle
                 ? `\n保存先: ${autoBackupDirHandle.name}（世代保存あり）`
                 : '\n保存先: 1ファイルを上書き（世代保存なし）';
-            const lastUpdateLine = `\n最終更新: ${autoBackupLastSuccessAt ? formatMonthDayTimeLabel(autoBackupLastSuccessAt) : 'まだありません'}${modeLine}${autoBackupInProgress ? '\n（保存中…）' : ''}`;
+            const lastUpdateLine = `\n最終更新: ${autoBackupLastSuccessAt ? formatMonthDayTimeLabel(autoBackupLastSuccessAt) : 'まだありません'}${modeLine}`;
             applyStyle(btn, '#2a9d5c', `自動バックアップ: 有効（クリックで保存先の変更・停止）${lastUpdateLine}`);
             applyStyle(floatingBtn, '#2a9d5c', `自動バックアップ: 有効（クリックで保存先の変更・停止）${lastUpdateLine}`);
         } else if (state === 'error') {
