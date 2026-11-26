@@ -1607,6 +1607,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     body.theme-blueprint .job-list > .job-item:nth-of-type(odd) { background: rgba(79,195,232,.07); }
     body.theme-blueprint .job-list > .job-item:hover { background: rgba(79,195,232,.18); }
     body.theme-blueprint .job-list > .job-item.active { background: #1B4B7C; border-left: 4px solid #4FC3E8; box-shadow: inset 0 0 0 1px #2E6FA8; color: #fff; }
+
+    /* ★追加(v1.18.0): 月カレンダーの今日のマス右上の「今日」の札。重ねて表示するだけで、マスの中の項目には影響しない。
+       空きが足りないとき(狭い画面で今日が祝日など)は小さな丸に切り替わる */
+    .cal-today-badge { position: absolute; top: 3px; right: 3px; font-size: 9px; line-height: 13px; height: 13px; padding: 0 5px; border-radius: 7px;
+        background: #e8590c; color: #fff; font-weight: bold; white-space: nowrap; pointer-events: none; z-index: 2; }
+    .cal-today-badge.dot { padding: 0; width: 6px; height: 6px; top: 1px; right: 1px; border-radius: 50%; } /* マスの余白(角)に置き、省略された祝日名の「…」にもかからないようにする */
+    body.theme-blueprint .cal-today-badge { background: #4FC3E8; color: #0F2A47; }
 </style>
 <style id="dynamic-print-page-size"></style> <!-- ★追加: A4/A3切り替え用。runPrintFlowが印刷直前に中身を書き換える -->
 </head>
@@ -2197,8 +2204,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.17.8';
-    const APP_RELEASE_DATE = '2026-11-25';
+    const APP_VERSION = '1.18.0';
+    const APP_RELEASE_DATE = '2026-11-26';
     let db;
 
     const QUALITY_SETTINGS = {
@@ -17988,6 +17995,35 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★修正: 期間指定TODOはマスをまたいで1本の帯として繋げて表示する（週ごとにレーンを割り当て、
     // 同じ週内の複数の期間バーが重ならないよう縦に積む）。通常のタグ（仕事の完了・単発TODO・予定など）は
     // 期間バーの下に続けて詰めて表示し、期間バーが無い日には無駄な空白ができないようにする
+    // ★追加(v1.18.0): 「今日」の札が、日付や祝日名にかぶらないかを測り、かぶる場合は小さな丸に切り替える。
+    // ウィンドウの幅が変わったときも測り直す（広がれば札に戻る）
+    function fitCalendarTodayBadge(cell, dayLabel, badge) {
+        const check = () => {
+            if (!badge.isConnected) { ro.disconnect(); return; }
+            badge.classList.remove('dot');
+            badge.textContent = '今日';
+            // 日付の行で、実際に文字が描かれている右端を求める（省略「…」されている場合は、本来の文字の右端＝はみ出し分も含める）
+            let contentRight = 0;
+            dayLabel.childNodes.forEach(el => {
+                const textNode = el.firstChild;
+                if (!textNode) return;
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                const r = range.getBoundingClientRect();
+                const clip = el.getBoundingClientRect();
+                const overflowed = el.scrollWidth > el.clientWidth + 1; // 省略されている＝本来は収まっていない
+                contentRight = Math.max(contentRight, overflowed ? clip.right + 999 : r.right);
+            });
+            const badgeLeft = badge.getBoundingClientRect().left;
+            if (contentRight + 3 > badgeLeft) {
+                badge.classList.add('dot');
+                badge.textContent = '';
+            }
+        };
+        const ro = new ResizeObserver(() => check());
+        ro.observe(cell);
+    }
+
     async function renderCalendarMonthView() {
         const label = document.getElementById('calendar-month-label');
         const grid = document.getElementById('calendar-month-grid');
@@ -18257,6 +18293,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
                         }
                         dayLabel.style.cssText = 'display:flex; align-items:baseline; gap:4px; min-width:0; font-size:11px; color:#999; margin-bottom:2px;';
                         cell.appendChild(dayLabel);
+                        // ★追加(v1.18.0): 今日のマスの右上に「今日」の札を重ねて表示する。中の項目の位置・大きさは一切変えない（絶対配置・クリックは素通り）
+                        const nowForToday = new Date();
+                        if (year === nowForToday.getFullYear() && month === nowForToday.getMonth() && thisDay === nowForToday.getDate()) {
+                            cell.style.position = 'relative'; // 札の位置の基準にするだけで、レイアウトは変わらない
+                            const todayBadge = document.createElement('span');
+                            todayBadge.className = 'cal-today-badge';
+                            todayBadge.textContent = '今日';
+                            todayBadge.title = '今日';
+                            cell.appendChild(todayBadge);
+                            fitCalendarTodayBadge(cell, dayLabel, todayBadge);
+                        }
 
                         // ★修正: この日で実際に使われている期間バーの分だけ、通常タグの前に空白を確保する
                         // （1つの縦積みエリアとして、期間バーを優先的に上に配置するため。バーが無ければ空白も作らない）
