@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Jobnavi スマホ</title>
+<script>try{var __t=localStorage.getItem('jobnaviTheme');if(__t==='light'||__t==='dark')document.documentElement.setAttribute('data-theme',__t);}catch(e){}</script>
 <style>
 :root{
   --bg:#f4f6fa; --card:#fff; --text:#1d2433; --sub:#6b7686; --line:#e3e6ec; --accent:#2f6df6;
@@ -19,9 +20,12 @@
   --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
 }
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#10151d; --card:#1a212c; --text:#e6eaf2; --sub:#9aa6b8; --line:#2b3442; --accent:#6c9bff;
-    --job-bg:#143327; --todo-bg:#14304a; --memo-bg:#3a3314; --hol-bg:#47262f; --red:#ff6b7a; --blue:#7fb0ff; --off:#3a4352; }
+  :root:not([data-theme=light]){ --bg:#10151d; --card:#1a212c; --text:#e6eaf2; --sub:#9aa6b8; --line:#2b3442; --accent:#6c9bff;
+    --job-bg:#143327; --todo-bg:#14304a; --memo-bg:#3a3314; --hol-bg:#47262f; --red:#ff6b7a; --blue:#7fb0ff; --off:#3a4352; color-scheme:dark; }
 }
+:root[data-theme=dark]{ --bg:#10151d; --card:#1a212c; --text:#e6eaf2; --sub:#9aa6b8; --line:#2b3442; --accent:#6c9bff;
+    --job-bg:#143327; --todo-bg:#14304a; --memo-bg:#3a3314; --hol-bg:#47262f; --red:#ff6b7a; --blue:#7fb0ff; --off:#3a4352; color-scheme:dark; }
+:root[data-theme=light]{ color-scheme:light; }
 *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body{ margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; font-size:15px; }
 body{ display:flex; flex-direction:column; overscroll-behavior:none; }
@@ -67,6 +71,7 @@ nav button.active{ color:var(--accent); font-weight:bold; }
 .chip{ font-size:9px; line-height:12px; padding:0 2px; border-radius:2px; white-space:nowrap; overflow:hidden; color:#1d2433; margin-top:1px; flex:0 0 auto; }
 .chip.job{ background:var(--job); } .chip.todo{ background:var(--todo); } .chip.memo{ background:var(--memo); } .chip.period{ background:var(--todo); } .chip.proj{ background:transparent; border:1px dashed var(--sub); color:var(--sub); }
 .chip.done{ opacity:.5; text-decoration:line-through; }
+.chip.slot{ height:13px; line-height:13px; margin-top:1px; }
 .chip.cont{ color:transparent; }
 .more{ font-size:9px; color:var(--sub); line-height:11px; }
 .legend{ display:flex; gap:10px; padding:0 12px 6px; font-size:11px; color:var(--sub); flex-wrap:wrap; }
@@ -130,7 +135,8 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 .msg{ color:var(--red); font-size:13px; min-height:1.2em; word-break:break-all; }
 .statusline{ margin:8px 0; padding:8px 10px; border-radius:8px; background:var(--card); border:1px solid var(--line); font-size:13px; word-break:break-all; }
 .warn{ color:#8a4b00; background:#fff6e5; border:1px solid #f0d9a8; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.6; margin:8px 0; }
-@media (prefers-color-scheme: dark){ .warn{ color:#ffd9a0; background:#3a2c12; border-color:#6b5320; } }
+@media (prefers-color-scheme: dark){ :root:not([data-theme=light]) .warn{ color:#ffd9a0; background:#3a2c12; border-color:#6b5320; } }
+:root[data-theme=dark] .warn{ color:#ffd9a0; background:#3a2c12; border-color:#6b5320; }
 #toast{ position:fixed; left:50%; bottom:calc(132px + var(--safe-b)); transform:translateX(-50%); background:#1d2433; color:#fff; padding:8px 14px; border-radius:18px; font-size:13px; z-index:60; display:none; max-width:86vw; }
 </style>
 </head>
@@ -152,7 +158,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 <script>
 (() => {
 'use strict';
-const PHONE_VERSION = '1.1.0';
+const PHONE_VERSION = '1.2.0';
 const PHONE_RELEASE = '2026-11-27';
 
 // ======== PCアプリ(Gomi Jobnavi)から、そのまま取り込んだ計算ルール ========
@@ -816,6 +822,7 @@ function dateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad
 // ======== 月カレンダー ========
 let viewDate = new Date(); viewDate.setDate(1);
 let tab = 'month', todoTab = 'pending';
+const openJobMonths = new Set(); let allJobMonths = false;
 
 function buildMonthData(year, month) {
   const todos = Object.values(S.todos), entries = Object.values(S.entries);
@@ -914,10 +921,17 @@ function renderMonth(main) {
       cell.append(h('div', { class: 'num' }, h('b', null, String(day)), isToday ? h('span', { class: 'tbadge' }, '今日') : null));
       cell.append(h('div', { class: 'hn' }, inMonth && hol ? hol : ''));
       if (inMonth) {
-        if (lanes > 0) cell.append(h('div', { style: `height:${lanes * LANE_H}px; flex:0 0 auto;` }));
+        // 帯はそのまま固定。帯がない段（帯が終わったあとなど）には、単日の予定を上から詰める
         const chips = (dayMap[day] || []).map(it => h('div', { class: 'chip ' + (it.type === 'proj' ? 'proj' : it.type) + (it.done ? ' done' : '') }, it.label));
-        chips.slice(0, 3).forEach(ch => cell.append(ch));
-        const extra = Math.max(0, chips.length - 3) + hidden[c];
+        const occ = new Set(placed.filter(p => p.sg.c1 <= c && c <= p.sg.c2).map(p => p.lane));
+        const usedLanes = occ.size ? Math.max(...occ) + 1 : 0;
+        let ci = 0, shown = 0;
+        for (let ln = 0; ln < usedLanes; ln++) {
+          if (!occ.has(ln) && ci < chips.length && shown < 3) { const ch = chips[ci++]; ch.classList.add('slot'); cell.append(ch); shown++; }
+          else cell.append(h('div', { style: `height:${LANE_H}px; flex:0 0 auto;` }));
+        }
+        while (ci < chips.length && shown < 3) { cell.append(chips[ci++]); shown++; }
+        const extra = Math.max(0, chips.length - ci) + hidden[c];
         if (extra > 0) cell.append(h('div', { class: 'more' }, `+${extra}`));
       }
       cellsEl.append(cell);
@@ -1271,6 +1285,7 @@ function renderJobs(main) {
   let missing = 0;
   list.forEach(en => { if (isPreviousMonthMissing(en, prev)) missing++; });
   main.append(h('div', { class: 'bar' }, h('div', { class: 'title', style: 'text-align:left' }, `${cy}年${cm}月の仕事`),
+    h('button', { class: 'btn small', onclick: () => { allJobMonths = !allJobMonths; openJobMonths.clear(); render(); } }, allJobMonths ? '月ごと:全部閉じる' : '月ごと:全部開く'),
     endedCount > 0 ? h('button', { class: 'btn small', onclick: () => { hideEnded = !hideEnded; render(); } }, hideEnded ? `終了を表示(${endedCount})` : '終了を隠す') : null));
   if (missing > 0) main.append(h('div', { class: 'hint', style: 'color:var(--warn)' }, `前月(${prev.month}月)の未完了 ${missing}件`));
   if (!all.length) { main.append(h('div', { class: 'empty' }, '仕事がまだありません。PCアプリで仕事をカレンダーに登録して、同期すると、ここに表示されます。')); return; }
@@ -1284,6 +1299,8 @@ function renderJobs(main) {
     tile.append(h('button', { class: 'jbtn ' + (isComplete ? 'complete' : (st === 'target' ? '' : st)), onclick: () => toggleEntryAsk(en, curKey) }, en.name));
     if (missingPrev) tile.append(h('span', { class: 'prevbadge' }, `${prev.month}月 未完了`));
     if (sched) tile.append(h('div', { style: 'font-size:10px; color:var(--sub); line-height:1.3' }, sched));
+    const isOpen = allJobMonths !== openJobMonths.has(en.id);
+    tile.append(h('button', { class: 'btn small', style: 'align-self:flex-start', onclick: () => { if (openJobMonths.has(en.id)) openJobMonths.delete(en.id); else openJobMonths.add(en.id); render(); } }, isOpen ? '月ごと ▲' : '月ごと ▼'));
     const dots = h('div', { class: 'dots' });
     CALENDAR_MONTHS.forEach(m => {
       const key = `${m.year}-${m.month}`;
@@ -1291,11 +1308,11 @@ function renderJobs(main) {
       const ds = getEntryMonthStatus(en, m.year, m.month);
       dots.append(h('button', { class: 'dot' + (on ? ' on' : '') + (ds === 'off' ? ' off' : '') + (ds === 'ended' ? ' ended' : '') + (key === curKey ? ' cur' : ''), 'aria-label': `${m.label}を切り替え`, onclick: () => toggleEntryAsk(en, key) }, String(m.month)));
     });
-    tile.append(dots);
+    if (isOpen) tile.append(dots);
     grid.append(tile);
   });
   main.append(grid);
-  main.append(h('div', { class: 'hint' }, '大きいボタン=今月の完了／未完了。下の丸=4月〜翌3月（緑=完了）。丸を押すと、その月を切り替えます。'));
+  main.append(h('div', { class: 'hint' }, '大きいボタン=今月の完了／未完了。「月ごと」ボタンで4月〜翌3月の丸（緑=完了）を開きます。丸を押すと、その月を切り替えます。'));
 }
 
 // ======== TODO・メモ ========
@@ -1485,7 +1502,7 @@ window.addEventListener('online', () => { if (S.cfg) syncNow(); });
 let sheetRefresh = null;
 function openSyncSheet() {
   const build = (sh) => {
-    sh.append(sheetHead('同期の設定'));
+    sh.append(sheetHead('設定（同期・テーマ）'));
     const statusLine = h('div', { class: 'statusline' });
     const colors = { off: 'var(--sub)', ok: 'var(--ok)', running: 'var(--accent)', error: 'var(--red)' };
     const show = () => { statusLine.style.color = colors[syncStatus.kind]; statusLine.textContent = '状態: ' + syncStatus.message + (syncStatus.okAt ? `　最後に同期できた時刻: ${new Date(syncStatus.okAt).toLocaleString('ja-JP')}` : ''); };
@@ -1505,6 +1522,15 @@ function openSyncSheet() {
       sh.append(h('div', { class: 'card' }, 'PCのGomi Jobnaviと、カレンダー・TODO・メモを同期します。データは端末で暗号化してから、Googleのスプレッドシートに預けます。'), statusLine,
         h('div', { style: 'display:flex; justify-content:flex-end;' }, h('button', { class: 'btn primary', onclick: () => setupForm(false) }, '設定する')));
     }
+    const cur = (() => { try { return localStorage.getItem('jobnaviTheme') || 'auto'; } catch (e) { return 'auto'; } })();
+    const themeSel = h('select', { style: 'width:100%; border:1px solid var(--line); background:var(--bg); color:var(--text); border-radius:8px; padding:9px 10px; font-size:16px; min-height:42px;' }, [['auto', '端末の設定に合わせる'], ['light', '明るい'], ['dark', '暗い']].map(([v, l]) => h('option', { value: v }, l)));
+    themeSel.value = cur;
+    themeSel.addEventListener('change', () => {
+      const v = themeSel.value;
+      try { if (v === 'auto') localStorage.removeItem('jobnaviTheme'); else localStorage.setItem('jobnaviTheme', v); } catch (e) { /* 保存できなくても今回は反映 */ }
+      if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v);
+    });
+    sh.append(h('label', { class: 'f', style: 'margin-top:12px' }, '表示テーマ', themeSel));
     sh.append(h('div', { class: 'hint', style: 'padding-left:0; margin-top:10px' }, `Jobnavi スマホ版 v${PHONE_VERSION}（${PHONE_RELEASE}）`));
   };
   const setupForm = (isChange) => openSheet(sh => {
