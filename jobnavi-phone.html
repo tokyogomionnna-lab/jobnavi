@@ -48,15 +48,23 @@ nav button.active{ color:var(--accent); font-weight:bold; }
 .dow{ display:grid; grid-template-columns:repeat(7,1fr); padding:0 6px; font-size:11px; color:var(--sub); text-align:center; }
 .dow span:first-child{ color:var(--red); } .dow span:last-child{ color:var(--blue); }
 .grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:1px; padding:2px 6px 8px; }
-.cell{ background:var(--card); min-height:66px; border-radius:4px; padding:2px 2px 3px; overflow:hidden; position:relative; border:1px solid transparent; display:flex; flex-direction:column; gap:1px; }
+.weeks{ padding:2px 0 8px; }
+.week{ position:relative; padding:0 6px 1px; }
+.wcells{ display:grid; grid-template-columns:repeat(7,1fr); gap:1px; }
+.wbars{ position:absolute; left:6px; right:6px; top:26px; display:grid; grid-template-columns:repeat(7,1fr); column-gap:1px; grid-auto-rows:13px; row-gap:1px; pointer-events:none; }
+.pbar{ font-size:10px; line-height:13px; padding:0 4px; white-space:nowrap; overflow:hidden; color:#1d2433; }
+.pbar.period{ background:var(--todo); } .pbar.memo{ background:var(--memo); }
+.pbar.l{ border-top-left-radius:4px; border-bottom-left-radius:4px; } .pbar.r{ border-top-right-radius:4px; border-bottom-right-radius:4px; }
+.pbar.done{ opacity:.5; text-decoration:line-through; }
+.cell{ background:var(--card); min-height:66px; border-radius:4px; padding:2px 2px 3px; overflow:hidden; position:relative; border:1px solid transparent; display:flex; flex-direction:column; gap:0; }
 .cell.other{ opacity:.45; }
 .cell.today{ border-color:var(--warn); }
-.cell .num{ font-size:11px; display:flex; align-items:center; justify-content:space-between; gap:2px; }
+.cell .num{ font-size:11px; display:flex; align-items:center; justify-content:space-between; gap:2px; height:14px; flex:0 0 auto; }
 .cell .num b{ font-weight:600; }
 .cell.sun .num b,.cell.hol .num b{ color:var(--red); } .cell.sat .num b{ color:var(--blue); }
 .cell .tbadge{ background:var(--warn); color:#fff; font-size:8px; border-radius:6px; padding:0 4px; line-height:12px; }
-.cell .hn{ font-size:8px; color:var(--red); white-space:nowrap; overflow:hidden; text-overflow:clip; line-height:10px; }
-.chip{ font-size:9px; line-height:12px; padding:0 2px; border-radius:2px; white-space:nowrap; overflow:hidden; color:#1d2433; }
+.cell .hn{ font-size:8px; color:var(--red); white-space:nowrap; overflow:hidden; text-overflow:clip; line-height:10px; height:10px; flex:0 0 auto; }
+.chip{ font-size:9px; line-height:12px; padding:0 2px; border-radius:2px; white-space:nowrap; overflow:hidden; color:#1d2433; margin-top:1px; flex:0 0 auto; }
 .chip.job{ background:var(--job); } .chip.todo{ background:var(--todo); } .chip.memo{ background:var(--memo); } .chip.period{ background:var(--todo); } .chip.proj{ background:transparent; border:1px dashed var(--sub); color:var(--sub); }
 .chip.done{ opacity:.5; text-decoration:line-through; }
 .chip.cont{ color:transparent; }
@@ -95,6 +103,20 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 .item .acts{ display:flex; flex-direction:column; gap:2px; }
 .item .acts button{ border:0; background:none; font-size:18px; min-width:40px; min-height:34px; color:var(--sub); }
 .sechead{ padding:8px 14px 2px; font-size:12px; color:var(--sub); font-weight:bold; }
+
+#quickadd{ flex:0 0 auto; background:var(--card); border-top:1px solid var(--line); padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
+#quickadd .row{ display:flex; gap:6px; align-items:center; }
+#quickadd input[type=text]{ min-height:40px; padding:7px 10px; }
+#quickadd .opt{ flex:0 0 auto; min-width:44px; min-height:40px; border:1px solid var(--line); background:var(--bg); border-radius:8px; font-size:18px; padding:0 8px; }
+#quickadd .opt.on{ border-color:var(--accent); color:var(--accent); background:var(--card); font-weight:bold; }
+#quickadd .sum{ font-size:11px; color:var(--accent); padding:0 4px; word-break:break-all; }
+.sch label.t{ display:block; font-weight:bold; font-size:13px; margin:12px 0 4px; color:var(--text); }
+.sch select,.sch input[type=number]{ width:100%; border:1px solid var(--line); background:var(--bg); color:var(--text); border-radius:8px; padding:9px 10px; font-size:16px; min-height:42px; font-family:inherit; }
+.sch .inl{ display:flex; align-items:center; gap:8px; } .sch .inl input[type=number]{ width:84px; }
+.sch .wk{ display:flex; gap:6px; flex-wrap:wrap; } .sch .wk label{ display:flex; align-items:center; gap:3px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:14px; background:var(--card); }
+.sch .cd{ display:flex; justify-content:space-between; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:4px 10px; margin-top:4px; font-size:14px; }
+.sch .cd button{ border:0; background:none; font-size:18px; color:var(--sub); min-width:36px; min-height:34px; }
+.sch .note{ font-size:11px; color:var(--sub); margin-top:4px; line-height:1.5; }
 /* シート */
 #sheet-bg{ position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; z-index:50; align-items:flex-end; justify-content:center; }
 #sheet-bg.open{ display:flex; }
@@ -109,7 +131,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 .statusline{ margin:8px 0; padding:8px 10px; border-radius:8px; background:var(--card); border:1px solid var(--line); font-size:13px; word-break:break-all; }
 .warn{ color:#8a4b00; background:#fff6e5; border:1px solid #f0d9a8; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.6; margin:8px 0; }
 @media (prefers-color-scheme: dark){ .warn{ color:#ffd9a0; background:#3a2c12; border-color:#6b5320; } }
-#toast{ position:fixed; left:50%; bottom:calc(76px + var(--safe-b)); transform:translateX(-50%); background:#1d2433; color:#fff; padding:8px 14px; border-radius:18px; font-size:13px; z-index:60; display:none; max-width:86vw; }
+#toast{ position:fixed; left:50%; bottom:calc(132px + var(--safe-b)); transform:translateX(-50%); background:#1d2433; color:#fff; padding:8px 14px; border-radius:18px; font-size:13px; z-index:60; display:none; max-width:86vw; }
 </style>
 </head>
 <body>
@@ -118,6 +140,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
   <button id="sync-btn" type="button"><span id="sync-dot"></span><span id="sync-label">未設定</span></button>
 </header>
 <main id="main"></main>
+<div id="quickadd"></div>
 <nav>
   <button type="button" data-tab="month" class="active"><span class="ico">📅</span>月カレンダー</button>
   <button type="button" data-tab="jobs"><span class="ico">✅</span>仕事</button>
@@ -129,7 +152,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 <script>
 (() => {
 'use strict';
-const PHONE_VERSION = '1.0.0';
+const PHONE_VERSION = '1.1.0';
 const PHONE_RELEASE = '2026-11-27';
 
 // ======== PCアプリ(Gomi Jobnavi)から、そのまま取り込んだ計算ルール ========
@@ -614,6 +637,52 @@ const S = { entries: {}, todos: {}, tomb: {}, cfg: null, sync: { since: 0, pushe
         return calendarNotes.filter(n => n.startDate <= key && key <= n.endDate).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.createdAt - b.createdAt);
     }
 
+    function resolveInitialSchedule(recurrence, scheduledAtInput, hasPeriod) {
+        const unchanged = { scheduledAt: scheduledAtInput, nominalAt: null };
+        if (scheduledAtInput || hasPeriod || !recurrence) return unchanged;
+        if (recurrence.type === 'custom') {
+            const dates = (recurrence.customDates || []).slice().sort();
+            if (dates.length === 0) return unchanged;
+            const todayStr = calRecurFormatDateOnly(Date.now());
+            const first = dates.find(d => d >= todayStr) || dates[0];
+            const [y, m, d] = first.split('-').map(Number);
+            return { scheduledAt: new Date(y, m - 1, d, 0, 0, 0, 0).getTime(), nominalAt: null };
+        }
+        const isSingleDayMonthly = recurrence.type === 'monthly' && !(recurrence.dayOfMonthEnd && recurrence.dayOfMonthEnd !== recurrence.dayOfMonth);
+        if (isSingleDayMonthly) {
+            const now = new Date(Date.now());
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            const hasAdjust = hasMonthlyAdjustment(recurrence);
+            for (let k = 0; k < 4; k++) { // 今月から順に見て、今日以降になる最初の月を使う
+                const first = new Date(now.getFullYear(), now.getMonth() + k, 1);
+                const daysInMonth = calRecurDaysInMonth(first.getFullYear(), first.getMonth());
+                const day = recurrence.dayOfMonth === 'last' ? daysInMonth : Math.min(recurrence.dayOfMonth || now.getDate(), daysInMonth);
+                const nominal = new Date(first.getFullYear(), first.getMonth(), day, 0, 0, 0, 0).getTime();
+                const adjusted = hasAdjust ? adjustMonthlyOccurrence(nominal, recurrence) : nominal;
+                if (nominal >= todayStart && adjusted >= todayStart) return { scheduledAt: adjusted, nominalAt: hasAdjust ? nominal : null };
+            }
+        }
+        return unchanged;
+    }
+
+    function computeInitialMonthlyPeriod(recurrence, referenceDateMs) {
+        const ref = new Date(referenceDateMs);
+        const daysInRefMonth = calRecurDaysInMonth(ref.getFullYear(), ref.getMonth());
+        const startDayInRefMonth = recurrence.dayOfMonth === 'last' ? daysInRefMonth : Math.min(recurrence.dayOfMonth, daysInRefMonth);
+        let targetYear = ref.getFullYear();
+        let targetMonth = ref.getMonth();
+        if (startDayInRefMonth < ref.getDate()) {
+            targetMonth += 1;
+            if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
+        }
+        const daysInTargetMonth = calRecurDaysInMonth(targetYear, targetMonth);
+        const finalStartDay = recurrence.dayOfMonth === 'last' ? daysInTargetMonth : Math.min(recurrence.dayOfMonth, daysInTargetMonth);
+        const finalEndDay = recurrence.dayOfMonthEnd === 'last' ? daysInTargetMonth : Math.min(recurrence.dayOfMonthEnd, daysInTargetMonth);
+        const periodStart = new Date(targetYear, targetMonth, finalStartDay, 0, 0, 0, 0).getTime();
+        const periodEnd = new Date(targetYear, targetMonth, finalEndDay, 23, 59, 59, 999).getTime();
+        return { periodStart, periodEnd };
+    }
+
     async function generateNextRecurringTodoIfNeeded(todo) {
         if (!todo.recurrence || !todo.done) return;
         try {
@@ -811,32 +880,59 @@ function renderMonth(main) {
   main.append(h('div', { class: 'dow' }, ['日', '月', '火', '水', '木', '金', '土'].map(d => h('span', null, d))));
   const first = new Date(year, month, 1), startW = first.getDay(), dim = new Date(year, month + 1, 0).getDate();
   const weeks = Math.ceil((startW + dim) / 7);
-  const grid = h('div', { class: 'grid' });
-  for (let i = 0; i < weeks * 7; i++) {
-    const d = new Date(year, month, 1 - startW + i);
-    const inMonth = d.getMonth() === month, day = d.getDate();
-    const hol = getJapaneseHolidayName(d.getFullYear(), d.getMonth(), d.getDate());
-    const dow = d.getDay();
-    const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    const cls = ['cell', !inMonth && 'other', isToday && 'today', dow === 0 && 'sun', dow === 6 && 'sat', hol && 'hol'].filter(Boolean).join(' ');
-    const cell = h('div', { class: cls, onclick: () => openDay(d) });
-    cell.append(h('div', { class: 'num' }, h('b', null, String(day)), isToday ? h('span', { class: 'tbadge' }, '今日') : null));
-    if (inMonth) {
-      if (hol) cell.append(h('div', { class: 'hn' }, hol));
-      const chips = [];
-      bars.filter(b => b.startDay <= day && day <= b.endDay).forEach(b => {
-        const showText = day === b.startDay || dow === 0;
-        chips.push(h('div', { class: 'chip ' + (b.kind === 'note' ? 'memo' : 'period') + (b.done ? ' done' : '') + (showText ? '' : ' cont') }, showText ? b.text : '・'));
-      });
-      (dayMap[day] || []).forEach(it => {
-        chips.push(h('div', { class: 'chip ' + (it.type === 'proj' ? 'proj' : it.type) + (it.done ? ' done' : '') }, it.label));
-      });
-      chips.slice(0, 3).forEach(c => cell.append(c));
-      if (chips.length > 3) cell.append(h('div', { class: 'more' }, `+${chips.length - 3}`));
+  // 日をまたぐ予定(期間のTODO・メモ)は、週ごとに「1本の帯」としてつなげて描く（日ごとに分けない）
+  const weeksEl = h('div', { class: 'weeks' });
+  const LANE_H = 14, MAX_LANES = 3;
+  for (let w = 0; w < weeks; w++) {
+    const segs = [];
+    bars.forEach(bar => {
+      const s = startW + bar.startDay - 1, e = startW + bar.endDay - 1;
+      const a = Math.max(s, w * 7), z = Math.min(e, w * 7 + 6);
+      if (a > z) return;
+      segs.push({ bar, c1: a - w * 7, c2: z - w * 7, left: a === s, right: z === e });
+    });
+    segs.sort((p, q) => p.c1 - q.c1 || (q.c2 - q.c1) - (p.c2 - p.c1));
+    const laneEnds = [], placed = [], hidden = [0, 0, 0, 0, 0, 0, 0];
+    segs.forEach(sg => {
+      let lane = laneEnds.findIndex(end => end < sg.c1);
+      if (lane === -1) {
+        if (laneEnds.length >= MAX_LANES) { for (let c = sg.c1; c <= sg.c2; c++) hidden[c]++; return; }
+        lane = laneEnds.length; laneEnds.push(-1);
+      }
+      laneEnds[lane] = sg.c2; placed.push({ sg, lane });
+    });
+    const lanes = laneEnds.length;
+    const cellsEl = h('div', { class: 'wcells' });
+    for (let c = 0; c < 7; c++) {
+      const d = new Date(year, month, 1 - startW + w * 7 + c);
+      const inMonth = d.getMonth() === month, day = d.getDate();
+      const hol = getJapaneseHolidayName(d.getFullYear(), d.getMonth(), d.getDate());
+      const dow = d.getDay();
+      const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      const cls = ['cell', !inMonth && 'other', isToday && 'today', dow === 0 && 'sun', dow === 6 && 'sat', hol && 'hol'].filter(Boolean).join(' ');
+      const cell = h('div', { class: cls, onclick: () => openDay(d) });
+      cell.append(h('div', { class: 'num' }, h('b', null, String(day)), isToday ? h('span', { class: 'tbadge' }, '今日') : null));
+      cell.append(h('div', { class: 'hn' }, inMonth && hol ? hol : ''));
+      if (inMonth) {
+        if (lanes > 0) cell.append(h('div', { style: `height:${lanes * LANE_H}px; flex:0 0 auto;` }));
+        const chips = (dayMap[day] || []).map(it => h('div', { class: 'chip ' + (it.type === 'proj' ? 'proj' : it.type) + (it.done ? ' done' : '') }, it.label));
+        chips.slice(0, 3).forEach(ch => cell.append(ch));
+        const extra = Math.max(0, chips.length - 3) + hidden[c];
+        if (extra > 0) cell.append(h('div', { class: 'more' }, `+${extra}`));
+      }
+      cellsEl.append(cell);
     }
-    grid.append(cell);
+    const weekEl = h('div', { class: 'week' }, cellsEl);
+    if (placed.length) {
+      const barsEl = h('div', { class: 'wbars' });
+      placed.forEach(({ sg, lane }) => {
+        barsEl.append(h('div', { class: 'pbar ' + (sg.bar.kind === 'note' ? 'memo' : 'period') + (sg.bar.done ? ' done' : '') + (sg.left ? ' l' : '') + (sg.right ? ' r' : ''), style: `grid-column:${sg.c1 + 1} / ${sg.c2 + 2}; grid-row:${lane + 1};` }, sg.bar.text));
+      });
+      weekEl.append(barsEl);
+    }
+    weeksEl.append(weekEl);
   }
-  main.append(grid);
+  main.append(weeksEl);
   main.append(h('div', { class: 'legend' },
     h('span', null, h('i', { style: 'background:var(--job)' }), '仕事の完了'), h('span', null, h('i', { style: 'background:var(--todo)' }), 'TODO・期間'),
     h('span', null, h('i', { style: 'background:var(--memo)' }), 'メモ'), h('span', null, h('i', { style: 'background:transparent;border:1px dashed var(--sub)' }), '繰り返しの予定')));
@@ -893,11 +989,167 @@ function confirmSheetBack(builder, message, okLabel, onOk) {
   });
 }
 
+
+// ======== 日付・期間・繰り返しの設定（PC版の「日付・期間・繰り返し」と同じ項目・同じ保存形式） ========
+function buildScheduleEditor(st, fallbackAnchor) {
+  st = st || {};
+  const rc = st.recurrence || null;
+  const el = h('div', { class: 'sch' });
+  const dt = h('input', { type: 'datetime-local', value: toLocalInput(st.scheduledAt) });
+  const type = h('select', null, [['none', '繰り返さない'], ['daily', '毎日'], ['weekly', '毎週'], ['monthly', '毎月'], ['business', '営業日で○日おき（土日祝・年末年始を除く）'], ['custom', '特定日を指定']].map(([v, l]) => h('option', { value: v }, l)));
+  type.value = rc ? rc.type : 'none';
+  const interval = h('input', { type: 'number', min: '1', value: String((rc && rc.interval) || 1) });
+  const suffix = h('span');
+  const wkChecks = ['日', '月', '火', '水', '木', '金', '土'].map((l, i) => { const c = h('input', { type: 'checkbox', value: String(i) }); c.checked = !!(rc && rc.daysOfWeek && rc.daysOfWeek.includes(i)); return { i, c, lab: h('label', null, c, l) }; });
+  const dom = h('select'), domEnd = h('select');
+  for (let d = 1; d <= 31; d++) dom.append(h('option', { value: String(d) }, d + '日'));
+  dom.append(h('option', { value: 'last' }, '月末'));
+  function rebuildEnd(startVal) {
+    domEnd.innerHTML = '';
+    if (startVal === 'last') { domEnd.append(h('option', { value: 'last' }, '月末')); return; }
+    for (let d = Number(startVal); d <= 31; d++) domEnd.append(h('option', { value: String(d) }, d + '日'));
+    domEnd.append(h('option', { value: 'last' }, '月末'));
+  }
+  const startDom = (rc && rc.dayOfMonth) ? String(rc.dayOfMonth) : '1';
+  dom.value = startDom; rebuildEnd(startDom);
+  domEnd.value = (rc && rc.dayOfMonthEnd) ? String(rc.dayOfMonthEnd) : startDom;
+  dom.addEventListener('change', () => { const prev = domEnd.value; rebuildEnd(dom.value); domEnd.value = Array.from(domEnd.options).some(o => o.value === prev) ? prev : dom.value; refresh(); });
+  domEnd.addEventListener('change', refresh);
+  const holiday = h('select', null, [['none', 'そのまま'], ['prev', '前の営業日にする'], ['next', '次の営業日にする']].map(([v, l]) => h('option', { value: v }, l)));
+  holiday.value = (rc && rc.holidayRule) || 'none';
+  const before = h('input', { type: 'number', min: '0', max: '30', value: String((rc && rc.businessDaysBefore) || 0) });
+  const oneS = h('input', { type: 'date', value: (!rc && st.periodStart) ? calRecurFormatDateOnly(st.periodStart) : '' });
+  const oneE = h('input', { type: 'date', value: (!rc && st.periodEnd) ? calRecurFormatDateOnly(st.periodEnd) : '' });
+  let customDates = (rc && rc.customDates) ? rc.customDates.slice() : [];
+  const cdList = h('div'); const cdAdd = h('input', { type: 'date' });
+  function renderCd() {
+    cdList.innerHTML = '';
+    if (!customDates.length) { cdList.append(h('div', { class: 'note' }, '追加された日付はありません')); return; }
+    customDates.slice().sort().forEach(d => cdList.append(h('div', { class: 'cd' }, h('span', null, d), h('button', { type: 'button', 'aria-label': '削除', onclick: () => { customDates = customDates.filter(x => x !== d); renderCd(); } }, '✕'))));
+  }
+  renderCd();
+  const endType = h('select', null, [['never', 'なし（無期限に繰り返す）'], ['until', '日付を指定して終了'], ['count', '回数を指定して終了']].map(([v, l]) => h('option', { value: v }, l)));
+  endType.value = (rc && rc.endType) || 'never';
+  const endDate = h('input', { type: 'date', value: (rc && rc.endDate) ? calRecurFormatDateOnly(rc.endDate) : '' });
+  const endCount = h('input', { type: 'number', min: '1', placeholder: '回数', value: (rc && rc.endCount) ? String(rc.endCount) : '' });
+  const msg = h('div', { class: 'msg' });
+  const rows = {
+    dt: h('div', null, h('label', { class: 't' }, '日時（任意）'), dt, h('div', { class: 'note' }, '予定の日時です。空なら、登録した日に出ます。')),
+    type: h('div', null, h('label', { class: 't' }, '繰り返しタイプ'), type),
+    interval: h('div', { class: 'inl', style: 'margin-top:10px' }, h('span', null, '毎'), interval, suffix),
+    week: h('div', null, h('label', { class: 't' }, '曜日（複数選択可）'), h('div', { class: 'wk' }, wkChecks.map(w => w.lab))),
+    month: h('div', null, h('label', { class: 't' }, '開始日'), dom, h('label', { class: 't' }, '終了日'), domEnd, h('div', { class: 'note' }, '開始日と終了日が同じなら単日、別の日にすると毎月その期間になります')),
+    holiday: h('div', null, h('label', { class: 't' }, '休日（土日祝・年末年始）にあたる場合'), holiday,
+      h('label', { class: 't' }, 'さらに、営業日で前にずらす'), h('div', { class: 'inl' }, h('span', null, '上の日付から'), before, h('span', null, '営業日前')),
+      h('div', { class: 'note' }, '0はずらしません。土日祝・年末年始は数えません。')),
+    one: h('div', null, h('label', { class: 't' }, '期間（任意）'), h('div', { class: 'note', style: 'margin:0 0 3px' }, '開始日'), oneS, h('div', { class: 'note', style: 'margin:6px 0 3px' }, '終了日'), oneE, h('div', { class: 'note' }, '開始日・終了日を両方指定すると、そのTODOが期間として扱われます')),
+    custom: h('div', null, h('label', { class: 't' }, '特定日を追加'), h('div', { style: 'display:flex; gap:6px' }, cdAdd, h('button', { type: 'button', class: 'btn', onclick: () => { if (cdAdd.value && !customDates.includes(cdAdd.value)) { customDates.push(cdAdd.value); renderCd(); } cdAdd.value = ''; } }, '追加')), cdList),
+    end: h('div', null, h('label', { class: 't' }, '終了条件'), endType, h('div', { style: 'margin-top:6px' }, endDate, endCount))
+  };
+  function refresh() {
+    const ty = type.value;
+    suffix.textContent = ty === 'daily' ? '日ごと' : ty === 'weekly' ? '週間ごと' : ty === 'monthly' ? 'ヶ月ごと' : ty === 'business' ? '営業日ごと' : '';
+    const sd = (v, on) => { v.style.display = on ? '' : 'none'; };
+    sd(rows.interval, ['daily', 'weekly', 'monthly', 'business'].includes(ty));
+    sd(rows.week, ty === 'weekly'); sd(rows.month, ty === 'monthly');
+    sd(rows.holiday, ty === 'monthly' && dom.value === domEnd.value);
+    sd(rows.one, ty === 'none'); sd(rows.custom, ty === 'custom');
+    sd(rows.end, ty !== 'none' && ty !== 'custom');
+    endDate.style.display = endType.value === 'until' ? '' : 'none';
+    endCount.style.display = endType.value === 'count' ? '' : 'none';
+  }
+  type.addEventListener('change', refresh); endType.addEventListener('change', refresh);
+  el.append(rows.dt, rows.type, rows.interval, rows.week, rows.month, rows.holiday, rows.one, rows.custom, rows.end, msg);
+  refresh();
+  // 保存形式はPC版と同じ。結果: { recurrence, periodStart, periodEnd, scheduledAt } / 入力エラーなら null（メッセージを表示）
+  function read() {
+    msg.textContent = '';
+    const ty = type.value;
+    const chosen = dt.value ? new Date(dt.value).getTime() : null;
+    let anchor = chosen || (rc && rc.anchorDate) || fallbackAnchor || Date.now();
+    let recurrence = null, periodStart = null, periodEnd = null;
+    if (ty === 'none') {
+      if (oneS.value && oneE.value) {
+        const s = new Date(oneS.value + 'T00:00:00').getTime(), e = new Date(oneE.value + 'T23:59:59').getTime();
+        if (s > e) { msg.textContent = '終了日は開始日以降にしてください'; return null; }
+        periodStart = s; periodEnd = e;
+      } else if (oneS.value || oneE.value) { msg.textContent = '期間は開始日・終了日を両方入れてください（片方だけだと保存されません）'; return null; }
+    } else {
+      recurrence = { type: ty, occurrenceIndex: 1, anchorDate: anchor, seriesId: (rc && rc.seriesId) || generateId() };
+      if (['daily', 'weekly', 'monthly', 'business'].includes(ty)) recurrence.interval = Math.max(1, parseInt(interval.value, 10) || 1);
+      if (ty === 'weekly') { recurrence.daysOfWeek = wkChecks.filter(w => w.c.checked).map(w => w.i); if (!recurrence.daysOfWeek.length) recurrence.daysOfWeek = [new Date(anchor).getDay()]; }
+      if (ty === 'monthly') {
+        recurrence.dayOfMonth = dom.value === 'last' ? 'last' : Number(dom.value);
+        recurrence.dayOfMonthEnd = domEnd.value === 'last' ? 'last' : Number(domEnd.value);
+        if (recurrence.dayOfMonth === recurrence.dayOfMonthEnd && (holiday.value === 'prev' || holiday.value === 'next')) recurrence.holidayRule = holiday.value;
+        const bd = Math.max(0, Math.min(30, parseInt(before.value, 10) || 0));
+        if (recurrence.dayOfMonth === recurrence.dayOfMonthEnd && bd > 0) recurrence.businessDaysBefore = bd;
+        if (recurrence.dayOfMonth !== recurrence.dayOfMonthEnd) { const ini = computeInitialMonthlyPeriod(recurrence, anchor); periodStart = ini.periodStart; periodEnd = ini.periodEnd; }
+      }
+      if (ty === 'custom') {
+        if (!customDates.length) { msg.textContent = '特定日を1つ以上追加してください'; return null; }
+        recurrence.customDates = customDates.slice();
+      } else {
+        recurrence.endType = endType.value;
+        recurrence.endDate = endType.value === 'until' && endDate.value ? new Date(endDate.value + 'T23:59:59').getTime() : null;
+        recurrence.endCount = endType.value === 'count' && endCount.value ? parseInt(endCount.value, 10) : null;
+      }
+    }
+    return { recurrence, periodStart, periodEnd, scheduledAt: chosen };
+  }
+  return { el, read };
+}
+function scheduleSummary(p) {
+  if (!p) return '';
+  const parts = [];
+  if (p.periodStart && p.periodEnd && !p.recurrence) parts.push(`${formatMonthDayLabel(p.periodStart)}〜${formatMonthDayLabel(p.periodEnd)}`);
+  else if (p.scheduledAt) parts.push(formatMonthDayTimeLabel(p.scheduledAt));
+  if (p.recurrence) parts.push('🔁 ' + summarizeRecurrence(p.recurrence));
+  return parts.join(' ／ ');
+}
+
+// ======== 常時表示のTODO追加バー（タブの上） ========
+let pendingAdd = null; // { recurrence, periodStart, periodEnd, scheduledAt }
+let quickText = '';
+function renderQuickAdd() {
+  const box = $('#quickadd'); box.innerHTML = '';
+  const input = h('input', { type: 'text', placeholder: 'TODOを追加', maxlength: '200', value: quickText, 'aria-label': 'TODOを追加' });
+  input.addEventListener('input', () => { quickText = input.value; });
+  const go = () => {
+    const text = input.value.trim(); if (!text) return;
+    const p = pendingAdd || {};
+    addTodoItem(text, p.scheduledAt || null, false, p.recurrence ? p : (p.periodStart ? p : null));
+    quickText = ''; pendingAdd = null; renderQuickAdd();
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  const opt = h('button', { type: 'button', class: 'opt' + (pendingAdd ? ' on' : ''), 'aria-label': '日付・期間・繰り返しの設定', onclick: () => {
+    quickText = input.value;
+    openSheet(sh => {
+      const ed = buildScheduleEditor(pendingAdd, Date.now());
+      sh.append(sheetHead('日付・期間・繰り返し'), ed.el,
+        h('div', { style: 'display:flex; gap:8px; justify-content:flex-end; margin-top:12px;' },
+          pendingAdd ? h('button', { class: 'btn', onclick: () => { pendingAdd = null; closeSheet(); renderQuickAdd(); } }, '設定を消す') : null,
+          h('button', { class: 'btn primary', onclick: () => { const r = ed.read(); if (!r) return; pendingAdd = (r.recurrence || r.periodStart || r.scheduledAt) ? r : null; closeSheet(); renderQuickAdd(); } }, '設定する')));
+    });
+  } }, '📅');
+  box.append(h('div', { class: 'row' }, input, opt, h('button', { class: 'btn primary', onclick: go }, '追加')));
+  if (pendingAdd) box.append(h('div', { class: 'sum' }, scheduleSummary(pendingAdd)));
+}
+
 // ======== TODO・メモの操作 ========
-function addTodoItem(text, scheduledAt, fromMonthDay) {
+function addTodoItem(text, scheduledAt, fromMonthDay, sched) {
   const maxOrder = Object.values(S.todos).reduce((mx, t) => Math.max(mx, t.sortOrder || 0), 0);
-  const t = { id: generateId(), text: text.slice(0, 200), done: false, sortOrder: maxOrder + 1, createdAt: Date.now(), completedAt: null, scheduledAt: scheduledAt || null, recurrence: null, periodStart: null, periodEnd: null };
-  if (fromMonthDay && scheduledAt) t.showFromMonthStart = true; // PCの月カレンダーから追加したときと同じ扱い
+  let rec = null, ps = null, pe = null, at = scheduledAt || null, nominal = null;
+  if (sched) {
+    rec = sched.recurrence || null; ps = sched.periodStart || null; pe = sched.periodEnd || null;
+    const hasPeriod = !!(ps && pe);
+    const ini = resolveInitialSchedule(rec, hasPeriod ? null : at, hasPeriod); // PC版と同じ: 特定日・毎月で日付が空なら最初の予定日を自動で決める
+    at = hasPeriod ? null : ini.scheduledAt; nominal = ini.nominalAt;
+    if (rec) rec = { ...rec, anchorDate: at || rec.anchorDate || Date.now() };
+  }
+  const t = { id: generateId(), text: text.slice(0, 200), done: false, sortOrder: maxOrder + 1, createdAt: Date.now(), completedAt: null, scheduledAt: at, recurrence: rec, periodStart: ps, periodEnd: pe };
+  if (nominal) t.recurrenceNominalAt = nominal;
+  if (fromMonthDay && at) t.showFromMonthStart = true; // PCの月カレンダーから追加したときと同じ扱い
   saveTodo(t);
 }
 function addNote(text, startDate, endDate) {
@@ -930,23 +1182,21 @@ function editTodo(t, backBuilder) {
   const fromList = !backBuilder;
   openSheet(sh => {
     const txt = h('input', { type: 'text', value: t.text, maxlength: '200' });
-    const hasPeriod = t.periodStart && t.periodEnd;
-    const dt = h('input', { type: 'datetime-local', value: toLocalInput(t.scheduledAt) });
+    const ed = buildScheduleEditor({ recurrence: t.recurrence, periodStart: t.periodStart, periodEnd: t.periodEnd, scheduledAt: t.scheduledAt }, t.scheduledAt || Date.now());
     const msg = h('div', { class: 'msg' });
     sh.append(h('h2', null, h('span', null, 'TODOを編集')),
-      h('label', { class: 'f' }, '内容', txt),
-      hasPeriod ? h('div', { class: 'hint' }, `期間: ${formatMonthDayLabel(t.periodStart)}〜${formatMonthDayLabel(t.periodEnd)}（期間・繰り返しの変更はPCで行います）`) : h('label', { class: 'f', style: 'margin-top:8px' }, '予定日時（空にすると日付なし）', dt),
-      t.recurrence ? h('div', { class: 'hint' }, '🔁 ' + summarizeRecurrence(t.recurrence) + '（繰り返しの変更はPCで行います）') : null,
-      msg,
-      h('div', { style: 'display:flex; gap:8px; justify-content:flex-end; margin-top:8px;' },
+      h('label', { class: 'f' }, '内容', txt), h('div', { style: 'height:6px' }), ed.el, msg,
+      h('div', { style: 'display:flex; gap:8px; justify-content:flex-end; margin-top:12px;' },
         h('button', { class: 'btn', onclick: () => { if (fromList) closeSheet(); else openSheetKeep(backBuilder); } }, 'やめる'),
         h('button', { class: 'btn primary', onclick: () => {
           const text = txt.value.trim(); if (!text) { msg.textContent = '内容を入れてください'; return; }
+          const r = ed.read(); if (!r) return;
           t.text = text.slice(0, 200);
-          if (!hasPeriod) {
-            const next = dt.value ? new Date(dt.value).getTime() : null;
-            if (next !== t.scheduledAt) { t.scheduledAt = next; if (!next) delete t.showFromMonthStart; }
-          }
+          const prevAt = t.scheduledAt;
+          t.recurrence = r.recurrence; t.periodStart = r.periodStart; t.periodEnd = r.periodEnd;
+          t.scheduledAt = (r.periodStart && r.periodEnd) ? null : r.scheduledAt; // PC版と同じ: 期間があるときは単日の予定日は持たない
+          if (!t.scheduledAt || t.scheduledAt !== prevAt) delete t.recurrenceNominalAt;
+          if (!t.scheduledAt || t.periodStart) delete t.showFromMonthStart;
           saveTodo(t);
           if (fromList) closeSheet(); else openSheetKeep(backBuilder);
         } }, '保存')));
@@ -1053,14 +1303,6 @@ function renderTodo(main) {
   const tabs = [['pending', 'TODO'], ['upcoming', '予定'], ['done', '完了'], ['memo', 'メモ']];
   main.append(h('div', { class: 'tabs' }, tabs.map(([k, label]) => h('button', { class: todoTab === k ? 'active' : '', onclick: () => { todoTab = k; render(); } }, label))));
   if (todoTab === 'memo') { renderMemoTab(main); return; }
-  if (todoTab === 'pending' || todoTab === 'upcoming') {
-    const input = h('input', { type: 'text', placeholder: 'TODOを追加', maxlength: '200' });
-    const dt = h('input', { type: 'datetime-local' });
-    const dtWrap = h('label', { class: 'f' }, '予定日時（なくてもOK）', dt);
-    const go = () => { const text = input.value.trim(); if (!text) return; addTodoItem(text, dt.value ? new Date(dt.value).getTime() : null, false); input.value = ''; };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
-    main.append(h('div', { class: 'addbox' }, h('div', { class: 'row' }, input, h('button', { class: 'btn primary', onclick: go }, '追加')), dtWrap));
-  }
   const all = Object.values(S.todos).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   let items;
   if (todoTab === 'done') items = all.filter(t => t.done).sort((a, b) => todoDoneTimestamp(b) - todoDoneTimestamp(a));
@@ -1295,6 +1537,7 @@ $('#sync-btn').addEventListener('click', openSyncSheet);
 // ======== 起動 ========
 async function init() {
   await loadState();
+  renderQuickAdd();
   render();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 無視 */ }
   if (S.cfg) { setStatus('running', '準備中…'); startSyncTimers(); setTimeout(() => { syncNow(); }, 800); } else setStatus('off', '未設定');
