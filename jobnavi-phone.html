@@ -32,6 +32,7 @@ body{ display:flex; flex-direction:column; overscroll-behavior:none; }
 button{ font:inherit; color:inherit; }
 header{ flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:calc(8px + var(--safe-t)) 14px 8px; background:var(--card); border-bottom:1px solid var(--line); }
 header h1{ margin:0; font-size:16px; flex:1; }
+#theme-btn{ border:1px solid var(--line); background:var(--card); border-radius:18px; width:40px; height:36px; font-size:18px; padding:0; line-height:1; }
 #sync-btn{ border:1px solid var(--line); background:var(--card); border-radius:18px; padding:6px 12px; font-size:12px; display:flex; align-items:center; gap:6px; min-height:36px; }
 #sync-dot{ width:10px; height:10px; border-radius:50%; background:var(--off); }
 #sync-dot.ok{ background:var(--ok); } #sync-dot.running{ background:var(--accent); animation:pulse 1s infinite; } #sync-dot.error{ background:var(--red); }
@@ -71,6 +72,7 @@ nav button.active{ color:var(--accent); font-weight:bold; }
 .chip{ font-size:9px; line-height:12px; padding:0 2px; border-radius:2px; white-space:nowrap; overflow:hidden; color:#1d2433; margin-top:1px; flex:0 0 auto; }
 .chip.job{ background:var(--job); } .chip.todo{ background:var(--todo); } .chip.memo{ background:var(--memo); } .chip.period{ background:var(--todo); } .chip.proj{ background:transparent; border:1px dashed var(--sub); color:var(--sub); }
 .chip.done{ opacity:.5; text-decoration:line-through; }
+.chip.job{ text-decoration:line-through; opacity:.7; }
 .chip.slot{ height:13px; line-height:13px; margin-top:1px; }
 .chip.cont{ color:transparent; }
 .more{ font-size:9px; color:var(--sub); line-height:11px; }
@@ -90,6 +92,8 @@ nav button.active{ color:var(--accent); font-weight:bold; }
 .hint{ padding:6px 14px; color:var(--sub); font-size:12px; }
 .empty{ padding:36px 16px; text-align:center; color:var(--sub); }
 /* TODO */
+.stickyhead{ position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }
+.searchbox{ padding:2px 12px 6px; } .searchbox input{ min-height:38px; padding:6px 10px; }
 .tabs{ display:flex; gap:6px; padding:8px 12px 4px; overflow-x:auto; }
 .tabs button{ border:1px solid var(--line); background:var(--card); border-radius:18px; padding:6px 14px; font-size:13px; white-space:nowrap; min-height:36px; }
 .tabs button.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -143,6 +147,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 <body>
 <header>
   <h1>Jobnavi</h1>
+  <button id="theme-btn" type="button" aria-label="テーマ切替" title="明るい/暗いを切り替え"></button>
   <button id="sync-btn" type="button"><span id="sync-dot"></span><span id="sync-label">未設定</span></button>
 </header>
 <main id="main"></main>
@@ -158,7 +163,7 @@ label.f{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var
 <script>
 (() => {
 'use strict';
-const PHONE_VERSION = '1.2.0';
+const PHONE_VERSION = '1.3.0';
 const PHONE_RELEASE = '2026-11-27';
 
 // ======== PCアプリ(Gomi Jobnavi)から、そのまま取り込んだ計算ルール ========
@@ -822,7 +827,18 @@ function dateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad
 // ======== 月カレンダー ========
 let viewDate = new Date(); viewDate.setDate(1);
 let tab = 'month', todoTab = 'pending';
-const openJobMonths = new Set(); let allJobMonths = false;
+let showHistory = false, jobQ = '', todoQ = '';
+const normQ = s => String(s || '').normalize('NFKC').toLowerCase();
+const matchQ = (s, q) => !q || normQ(s).includes(normQ(q).trim());
+function makeSearch(placeholder, get, set, id) {
+  let composing = false;
+  const inp = h('input', { type: 'text', placeholder, value: get(), 'aria-label': placeholder, id });
+  const fire = () => { set(inp.value); const pos = inp.selectionStart; render(); const n = document.getElementById(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* 無視 */ } } };
+  inp.addEventListener('compositionstart', () => { composing = true; });
+  inp.addEventListener('compositionend', () => { composing = false; fire(); });
+  inp.addEventListener('input', () => { if (!composing) fire(); });
+  return h('div', { class: 'searchbox' }, inp);
+}
 
 function buildMonthData(year, month) {
   const todos = Object.values(S.todos), entries = Object.values(S.entries);
@@ -1280,15 +1296,17 @@ function renderJobs(main) {
   const isEnded = en => getEntryMonthStatus(en, curFound.year, curFound.month) === 'ended';
   const ordered = all.filter(en => !isEnded(en)).concat(all.filter(isEnded));
   const endedCount = all.filter(isEnded).length;
-  const list = hideEnded ? ordered.filter(en => !isEnded(en)) : ordered;
+  const list = (hideEnded ? ordered.filter(en => !isEnded(en)) : ordered).filter(en => matchQ(en.name, jobQ));
   const prev = getPreviousMonthInfo();
   let missing = 0;
   list.forEach(en => { if (isPreviousMonthMissing(en, prev)) missing++; });
-  main.append(h('div', { class: 'bar' }, h('div', { class: 'title', style: 'text-align:left' }, `${cy}年${cm}月の仕事`),
-    h('button', { class: 'btn small', onclick: () => { allJobMonths = !allJobMonths; openJobMonths.clear(); render(); } }, allJobMonths ? '月ごと:全部閉じる' : '月ごと:全部開く'),
-    endedCount > 0 ? h('button', { class: 'btn small', onclick: () => { hideEnded = !hideEnded; render(); } }, hideEnded ? `終了を表示(${endedCount})` : '終了を隠す') : null));
+  main.append(h('div', { class: 'stickyhead' }, h('div', { class: 'bar' }, h('div', { class: 'title', style: 'text-align:left' }, `${cy}年${cm}月の仕事`),
+    h('button', { class: 'btn small', onclick: () => { showHistory = !showHistory; render(); } }, '年間の履歴 ' + (showHistory ? '▲' : '▼')),
+    endedCount > 0 ? h('button', { class: 'btn small', onclick: () => { hideEnded = !hideEnded; render(); } }, hideEnded ? `終了を表示(${endedCount})` : '終了を隠す') : null),
+    makeSearch('仕事を検索', () => jobQ, v => { jobQ = v; }, 'job-q')));
   if (missing > 0) main.append(h('div', { class: 'hint', style: 'color:var(--warn)' }, `前月(${prev.month}月)の未完了 ${missing}件`));
   if (!all.length) { main.append(h('div', { class: 'empty' }, '仕事がまだありません。PCアプリで仕事をカレンダーに登録して、同期すると、ここに表示されます。')); return; }
+  if (!list.length) { main.append(h('div', { class: 'empty' }, '該当する仕事はありません')); return; }
   const grid = h('div', { class: 'jobgrid' });
   list.forEach(en => {
     const isComplete = en.completed && en.completed[curKey] === 'complete';
@@ -1299,8 +1317,6 @@ function renderJobs(main) {
     tile.append(h('button', { class: 'jbtn ' + (isComplete ? 'complete' : (st === 'target' ? '' : st)), onclick: () => toggleEntryAsk(en, curKey) }, en.name));
     if (missingPrev) tile.append(h('span', { class: 'prevbadge' }, `${prev.month}月 未完了`));
     if (sched) tile.append(h('div', { style: 'font-size:10px; color:var(--sub); line-height:1.3' }, sched));
-    const isOpen = allJobMonths !== openJobMonths.has(en.id);
-    tile.append(h('button', { class: 'btn small', style: 'align-self:flex-start', onclick: () => { if (openJobMonths.has(en.id)) openJobMonths.delete(en.id); else openJobMonths.add(en.id); render(); } }, isOpen ? '月ごと ▲' : '月ごと ▼'));
     const dots = h('div', { class: 'dots' });
     CALENDAR_MONTHS.forEach(m => {
       const key = `${m.year}-${m.month}`;
@@ -1308,26 +1324,27 @@ function renderJobs(main) {
       const ds = getEntryMonthStatus(en, m.year, m.month);
       dots.append(h('button', { class: 'dot' + (on ? ' on' : '') + (ds === 'off' ? ' off' : '') + (ds === 'ended' ? ' ended' : '') + (key === curKey ? ' cur' : ''), 'aria-label': `${m.label}を切り替え`, onclick: () => toggleEntryAsk(en, key) }, String(m.month)));
     });
-    if (isOpen) tile.append(dots);
+    if (showHistory) tile.append(dots);
     grid.append(tile);
   });
   main.append(grid);
-  main.append(h('div', { class: 'hint' }, '大きいボタン=今月の完了／未完了。「月ごと」ボタンで4月〜翌3月の丸（緑=完了）を開きます。丸を押すと、その月を切り替えます。'));
+  main.append(h('div', { class: 'hint' }, '大きいボタン=今月の完了／未完了。「年間の履歴」ボタンで4月〜翌3月の丸（緑=完了）を開きます。丸を押すと、その月を切り替えます。'));
 }
 
 // ======== TODO・メモ ========
 function renderTodo(main) {
   const tabs = [['pending', 'TODO'], ['upcoming', '予定'], ['done', '完了'], ['memo', 'メモ']];
-  main.append(h('div', { class: 'tabs' }, tabs.map(([k, label]) => h('button', { class: todoTab === k ? 'active' : '', onclick: () => { todoTab = k; render(); } }, label))));
+  main.append(h('div', { class: 'stickyhead' }, h('div', { class: 'tabs' }, tabs.map(([k, label]) => h('button', { class: todoTab === k ? 'active' : '', onclick: () => { todoTab = k; render(); } }, label))),
+    makeSearch('TODO・メモを検索', () => todoQ, v => { todoQ = v; }, 'todo-q')));
   if (todoTab === 'memo') { renderMemoTab(main); return; }
-  const all = Object.values(S.todos).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const all = Object.values(S.todos).filter(t => matchQ(t.text, todoQ)).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   let items;
   if (todoTab === 'done') items = all.filter(t => t.done).sort((a, b) => todoDoneTimestamp(b) - todoDoneTimestamp(a));
   else if (todoTab === 'upcoming') items = all.filter(t => !t.done && !isTodoDueForPendingList(t));
   else items = all.filter(t => !t.done && isTodoDueForPendingList(t));
   const list = h('div', { class: 'list' });
   if (todoTab === 'done') {
-    const doneNotes = calendarNotes.filter(n => n.done);
+    const doneNotes = calendarNotes.filter(n => n.done && matchQ(n.text, todoQ));
     const merged = items.map(t => ({ ts: todoDoneTimestamp(t), el: () => todoRow(t) })).concat(doneNotes.map(n => ({ ts: n.completedAt || n.createdAt || 0, el: () => memoRow(n) }))).sort((a, b) => b.ts - a.ts).slice(0, 200);
     merged.forEach(m => list.append(m.el()));
     if (!merged.length) list.append(h('div', { class: 'empty' }, '完了したものはまだありません'));
@@ -1347,9 +1364,10 @@ function renderMemoTab(main) {
   input.addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
   main.append(h('div', { class: 'addbox' }, h('div', { class: 'row' }, input, h('button', { class: 'btn primary', onclick: go }, '追加')),
     h('div', { class: 'row' }, h('label', { class: 'f', style: 'flex:1' }, '開始日', s), h('label', { class: 'f', style: 'flex:1' }, '終了日', e))));
-  const active = calendarNotes.filter(n => !n.done && n.startDate <= todayKey && todayKey <= n.endDate).sort((a, b) => a.endDate.localeCompare(b.endDate) || a.startDate.localeCompare(b.startDate) || a.createdAt - b.createdAt);
-  const upcoming = calendarNotes.filter(n => !n.done && n.startDate > todayKey && n.startDate <= monthEndKey).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.createdAt - b.createdAt);
-  const later = calendarNotes.filter(n => !n.done && n.startDate > monthEndKey).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const cn = calendarNotes.filter(n => matchQ(n.text, todoQ));
+  const active = cn.filter(n => !n.done && n.startDate <= todayKey && todayKey <= n.endDate).sort((a, b) => a.endDate.localeCompare(b.endDate) || a.startDate.localeCompare(b.startDate) || a.createdAt - b.createdAt);
+  const upcoming = cn.filter(n => !n.done && n.startDate > todayKey && n.startDate <= monthEndKey).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.createdAt - b.createdAt);
+  const later = cn.filter(n => !n.done && n.startDate > monthEndKey).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const sec = (title, arr, fade) => { if (!arr.length) return; main.append(h('div', { class: 'sechead' }, title)); const l = h('div', { class: 'list' }); arr.forEach(n => { const r = memoRow(n); if (fade) r.classList.add('fade'); l.append(r); }); main.append(l); };
   sec('今日有効なメモ', active, false); sec('今月これから始まるメモ', upcoming, true); sec('来月以降のメモ', later, true);
   if (!active.length && !upcoming.length && !later.length) main.append(h('div', { class: 'empty' }, '有効なメモはありません'));
@@ -1502,7 +1520,7 @@ window.addEventListener('online', () => { if (S.cfg) syncNow(); });
 let sheetRefresh = null;
 function openSyncSheet() {
   const build = (sh) => {
-    sh.append(sheetHead('設定（同期・テーマ）'));
+    sh.append(sheetHead('同期の設定'));
     const statusLine = h('div', { class: 'statusline' });
     const colors = { off: 'var(--sub)', ok: 'var(--ok)', running: 'var(--accent)', error: 'var(--red)' };
     const show = () => { statusLine.style.color = colors[syncStatus.kind]; statusLine.textContent = '状態: ' + syncStatus.message + (syncStatus.okAt ? `　最後に同期できた時刻: ${new Date(syncStatus.okAt).toLocaleString('ja-JP')}` : ''); };
@@ -1522,15 +1540,6 @@ function openSyncSheet() {
       sh.append(h('div', { class: 'card' }, 'PCのGomi Jobnaviと、カレンダー・TODO・メモを同期します。データは端末で暗号化してから、Googleのスプレッドシートに預けます。'), statusLine,
         h('div', { style: 'display:flex; justify-content:flex-end;' }, h('button', { class: 'btn primary', onclick: () => setupForm(false) }, '設定する')));
     }
-    const cur = (() => { try { return localStorage.getItem('jobnaviTheme') || 'auto'; } catch (e) { return 'auto'; } })();
-    const themeSel = h('select', { style: 'width:100%; border:1px solid var(--line); background:var(--bg); color:var(--text); border-radius:8px; padding:9px 10px; font-size:16px; min-height:42px;' }, [['auto', '端末の設定に合わせる'], ['light', '明るい'], ['dark', '暗い']].map(([v, l]) => h('option', { value: v }, l)));
-    themeSel.value = cur;
-    themeSel.addEventListener('change', () => {
-      const v = themeSel.value;
-      try { if (v === 'auto') localStorage.removeItem('jobnaviTheme'); else localStorage.setItem('jobnaviTheme', v); } catch (e) { /* 保存できなくても今回は反映 */ }
-      if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v);
-    });
-    sh.append(h('label', { class: 'f', style: 'margin-top:12px' }, '表示テーマ', themeSel));
     sh.append(h('div', { class: 'hint', style: 'padding-left:0; margin-top:10px' }, `Jobnavi スマホ版 v${PHONE_VERSION}（${PHONE_RELEASE}）`));
   };
   const setupForm = (isChange) => openSheet(sh => {
@@ -1559,6 +1568,17 @@ function openSyncSheet() {
   openSheetKeep(build);
 }
 $('#sync-btn').addEventListener('click', openSyncSheet);
+
+// ======== テーマ（明るい/暗い）。ヘッダーのボタンで切り替え、端末に保存する ========
+function effectiveTheme() { const a = document.documentElement.getAttribute('data-theme'); if (a === 'light' || a === 'dark') return a; return (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
+function updateThemeBtn() { const dark = effectiveTheme() === 'dark'; const b = $('#theme-btn'); b.textContent = dark ? '☀️' : '🌙'; b.title = b.ariaLabel = dark ? '明るいテーマにする' : '暗いテーマにする'; }
+$('#theme-btn').addEventListener('click', () => {
+  const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('jobnaviTheme', next); } catch (e) { /* 保存できなくても今回は反映 */ }
+  updateThemeBtn();
+});
+updateThemeBtn();
 
 // ======== 起動 ========
 async function init() {
