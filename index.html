@@ -2206,7 +2206,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
     // ★追加: アプリ名・バージョン・更新日。公開(GitHub Pages)後に、どの版が開かれているかを確認できるよう、サイドバーの下部に表示する。
     // 更新するときは、この3つを書き換える（バージョンは 主.機能.修正 の形）
     const APP_NAME = 'Gomi Jobnavi';
-    const APP_VERSION = '1.20.0';
+    const APP_VERSION = '1.20.1';
     const APP_RELEASE_DATE = '2026-11-27';
     let db;
 
@@ -3996,13 +3996,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([document.
             out.push({ k, u: syncTombstones[k], d: 1, p: '' });
             sentTimes[k] = syncTombstones[k];
         });
-        const resp = await syncRequest(out);
-        if (resp.ver < syncState.since) return { resetNeeded: true };
-        Object.keys(sentTimes).forEach(k => { syncState.pushed[k] = sentTimes[k]; });
-        await syncSaveState();
-        const received = await syncApplyRemote(resp.items || []);
-        syncState.since = resp.ver;
-        await syncSaveState();
+        // 項目が多いときは、サーバーの上限(1回3000件)や通信時間を超えないよう、400件・約90万文字ずつに分けて順番に送る。
+        // 2回目以降は、直前の返事の版番号から続ける（その間に他の端末が書いた分も取りこぼさない）。1回ごとに反映・保存する。
+        const chunks = [];
+        let cur = [], curChars = 0;
+        for (const it of out) {
+            const len = it.p.length + it.k.length + 40;
+            if (cur.length && (cur.length >= 400 || curChars + len > 900000)) { chunks.push(cur); cur = []; curChars = 0; }
+            cur.push(it); curChars += len;
+        }
+        chunks.push(cur); // 送るものが無くても、受信のために1回は通信する
+        let received = 0;
+        for (const part of chunks) {
+            const resp = await syncRequest(part);
+            if (resp.ver < syncState.since) return { resetNeeded: true };
+            part.forEach(it => { syncState.pushed[it.k] = sentTimes[it.k]; });
+            await syncSaveState();
+            received += await syncApplyRemote(resp.items || []);
+            syncState.since = resp.ver;
+            await syncSaveState();
+        }
         return { sent: out.length, received };
     }
 
